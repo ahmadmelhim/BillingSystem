@@ -1,0 +1,170 @@
+@page "/customers"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+@inject ICustomerService CustomerService
+@inject NavigationManager Navigation
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject LanguageService Lang
+@implements IDisposable
+
+<MudPaper Class="pa-4">
+
+    <MudStack Row="true"
+              Justify="Justify.SpaceBetween"
+              AlignItems="AlignItems.Center"
+              Class="mb-4">
+        <MudText Typo="Typo.h5">@Lang["Customers"]</MudText>
+
+        <MudButton Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="NewCustomer">
+            @Lang["AddCustomer"]
+        </MudButton>
+    </MudStack>
+
+    <!-- ????: ???????? Value + ValueChanged ???? @bind-Value -->
+    <MudTextField T="string"
+                  Value="@searchTerm"
+                  ValueChanged="OnSearchChanged"
+                  ValueExpression="@(() => searchTerm)"
+                  Placeholder="@Lang["SearchForCustomer"]"
+                  Adornment="Adornment.Start"
+                  AdornmentIcon="@Icons.Material.Filled.Search"
+                  Immediate="true"
+                  Class="mb-4 w-100" />
+
+    <MudTable T="Customer"
+              @ref="table"
+              ServerData="LoadServerData"
+              Hover="true"
+              Dense="true"
+              Bordered="true"
+              Elevation="3"
+              RowsPerPage="10"
+              Breakpoint="Breakpoint.Sm">
+
+        <HeaderContent>
+            <MudTh>@Lang["Name"]</MudTh>
+            <MudTh>@Lang["Email"]</MudTh>
+            <MudTh>@Lang["Phone"]</MudTh>
+            <MudTh>@Lang["Address"]</MudTh>
+            <MudTh>@Lang["CreatedAt"]</MudTh>
+            <MudTh>@Lang["Actions"]</MudTh>
+        </HeaderContent>
+
+        <RowTemplate>
+            <MudTd DataLabel="@Lang["Name"]">@context.Name</MudTd>
+            <MudTd DataLabel="@Lang["Email"]">@context.Email</MudTd>
+            <MudTd DataLabel="@Lang["Phone"]">@context.Phone</MudTd>
+            <MudTd DataLabel="@Lang["Address"]">@context.Address</MudTd>
+            <MudTd DataLabel="@Lang["CreatedAt"]">
+                @context.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
+            </MudTd>
+            <MudTd DataLabel="@Lang["Actions"]">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                               Color="Color.Primary"
+                               Size="Size.Small"
+                               OnClick="@(() => EditCustomer(context.Id))" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                               Color="Color.Error"
+                               Size="Size.Small"
+                               OnClick="@(() => DeleteCustomer(context))" />
+            </MudTd>
+        </RowTemplate>
+
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
+
+    </MudTable>
+
+</MudPaper>
+
+@code {
+    private MudTable<Customer>? table;
+    private string? searchTerm;
+
+    // ????? ???????? ?? ??????? (?? Paging + Search)
+    private async Task<TableData<Customer>> LoadServerData(TableState state, CancellationToken cancellationToken)
+    {
+        var page = state.Page + 1;      // MudTable ???? ??????? ?? 0
+        var pageSize = state.PageSize;
+
+        var result = await CustomerService.GetPagedAsync(page, pageSize, searchTerm);
+
+        return new TableData<Customer>
+            {
+                Items = result.Items,
+                TotalItems = result.TotalCount
+            };
+    }
+
+    private async Task OnSearchChanged(string? text)
+    {
+        searchTerm = text;
+
+        if (table is not null)
+            await table.ReloadServerData();
+    }
+
+    private void NewCustomer()
+    {
+        Navigation.NavigateTo("/customers/edit");
+    }
+
+    private void EditCustomer(int id)
+    {
+        Navigation.NavigateTo($"/customers/edit/{id}");
+    }
+    private async Task DeleteCustomer(Customer c)
+    {
+        var parameters = new DialogParameters
+    {
+        { "Message", string.Format(Lang["ConfirmDeleteCustomer"], c.Name) }
+    };
+
+        var options = new DialogOptions
+            {
+                MaxWidth = MaxWidth.Small,
+                FullWidth = true,
+                CloseOnEscapeKey = true
+            };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            try
+            {
+                await CustomerService.DeleteAsync(c.Id);
+                Snackbar.Add(Lang["CustomerDeletedSuccessfully"], Severity.Success);
+
+                if (table is not null)
+                    await table.ReloadServerData();
+            }
+            catch (InvalidOperationException ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
+            catch
+            {
+                Snackbar.Add(Lang["ErrorDeletingCustomer"], Severity.Error);
+            }
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        Lang.OnLanguageChanged += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        Lang.OnLanguageChanged -= StateHasChanged;
+    }
+}
+
+

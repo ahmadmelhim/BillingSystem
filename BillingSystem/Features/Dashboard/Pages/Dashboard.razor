@@ -1,0 +1,441 @@
+@page "/dashboard"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+@using BillingSystem.Infrastructure.Data
+@using BillingSystem.Core.Models
+@using Microsoft.EntityFrameworkCore
+@using MudBlazor
+
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject ISnackbar Snackbar
+@inject LanguageService Lang
+@inject ICurrentUserService CurrentUserService
+@implements IDisposable
+
+<MudPaper Class="pa-4">
+
+    <MudText Typo="Typo.h5" Class="mb-4">@Lang["Dashboard"]</MudText>
+
+    @if (_isLoading)
+    {
+        <MudProgressCircular Indeterminate="true" />
+    }
+    else if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <MudAlert Severity="Severity.Error">@_errorMessage</MudAlert>
+    }
+    else
+    {
+        <!-- بطاقات الفواتير الرئيسية -->
+        <MudGrid GutterSize="3" Class="mb-4">
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="3" Class="d-flex flex-column align-center justify-center pa-4 h-100">
+                    <MudIcon Icon="@Icons.Material.Filled.Receipt" Size="Size.Large" Color="Color.Primary" Class="mb-2" />
+                    <MudText Typo="Typo.subtitle1" Align="Align.Center">@Lang["TotalInvoices"]</MudText>
+                    <MudText Typo="Typo.h4" Color="Color.Primary">@_totalInvoices</MudText>
+                    <MudText Typo="Typo.caption">₪ @_totalAmount.ToString("N2")</MudText>
+                </MudCard>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="3" Class="d-flex flex-column align-center justify-center pa-4 h-100">
+                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Large" Color="Color.Success" Class="mb-2" />
+                    <MudText Typo="Typo.subtitle1" Align="Align.Center">@Lang["Paid"]</MudText>
+                    <MudText Typo="Typo.h4" Color="Color.Success">@_paidInvoices</MudText>
+                    <MudText Typo="Typo.caption">₪ @_paidAmount.ToString("N2")</MudText>
+                </MudCard>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="3" Class="d-flex flex-column align-center justify-center pa-4 h-100">
+                    <MudIcon Icon="@Icons.Material.Filled.HourglassEmpty" Size="Size.Large" Color="Color.Warning" Class="mb-2" />
+                    <MudText Typo="Typo.subtitle1" Align="Align.Center">@Lang["Pending"]</MudText>
+                    <MudText Typo="Typo.h4" Color="Color.Warning">@_pendingInvoices</MudText>
+                    <MudText Typo="Typo.caption">₪ @_pendingAmount.ToString("N2")</MudText>
+                </MudCard>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Elevation="3" Class="d-flex flex-column align-center justify-center pa-4 h-100">
+                    <MudIcon Icon="@Icons.Material.Filled.Error" Size="Size.Large" Color="Color.Error" Class="mb-2" />
+                    <MudText Typo="Typo.subtitle1" Align="Align.Center">@Lang["Overdue"]</MudText>
+                    <MudText Typo="Typo.h4" Color="Color.Error">@_overdueInvoices</MudText>
+                    <MudText Typo="Typo.caption">₪ @_overdueAmount.ToString("N2")</MudText>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+
+        <!-- بطاقات إحصائيات إضافية -->
+        <MudGrid GutterSize="3" Class="mb-4">
+            <MudItem xs="12" sm="4">
+                <MudCard Elevation="2" Class="pa-3 d-flex flex-row align-center gap-3">
+                    <MudAvatar Color="Color.Info" Icon="@Icons.Material.Filled.People" />
+                    <div>
+                        <MudText Typo="Typo.subtitle2">@Lang["TotalCustomers"]</MudText>
+                        <MudText Typo="Typo.h6">@_totalCustomers</MudText>
+                    </div>
+                </MudCard>
+            </MudItem>
+
+            <MudItem xs="12" sm="4">
+                <MudCard Elevation="2" Class="pa-3 d-flex flex-row align-center gap-3">
+                    <MudAvatar Color="Color.Secondary" Icon="@Icons.Material.Filled.Payment" />
+                    <div>
+                        <MudText Typo="Typo.subtitle2">@Lang["PaymentCount"]</MudText>
+                        <MudText Typo="Typo.h6">@_totalPayments</MudText>
+                    </div>
+                </MudCard>
+            </MudItem>
+
+            <MudItem xs="12" sm="4">
+                <MudCard Elevation="2" Class="pa-3 d-flex flex-row align-center gap-3">
+                    <MudAvatar Color="Color.Success" Icon="@Icons.Material.Filled.AttachMoney" />
+                    <div>
+                        <MudText Typo="Typo.subtitle2">@Lang["TotalPayments"]</MudText>
+                        <MudText Typo="Typo.h6">₪ @_totalPaymentsAmount.ToString("N2")</MudText>
+                    </div>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+
+        <!-- رسوم بيانية -->
+        <MudText Typo="Typo.h6" Class="mt-6 mb-4" Style="font-weight: 600;">@Lang["AnalyticsAndStatistics"]</MudText>
+        
+        <MudGrid Spacing="3">
+            <!-- Donut: توزيع الفواتير حسب الحالة -->
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-4" Elevation="3" Style="border-radius: 12px; height: 100%;">
+                    <MudText Typo="Typo.h6" Class="mb-4" Style="color: #1976d2; font-weight: 500;">
+                        @Lang["InvoiceStatusDistribution"]
+                    </MudText>
+                    <MudDivider Class="mb-4" />
+                    <MudChart ChartType="ChartType.Donut"
+                              Width="100%" Height="320px"
+                              InputData="@_statusData"
+                              InputLabels="@_statusLabels"
+                              ChartOptions="@_pieChartOptions">
+                        <CustomGraphics>
+                            <text class="mud-charts-legend" x="50%" y="44%" dominant-baseline="middle" text-anchor="middle" fill="#757575" font-size="12" font-weight="500">@Lang["Total"]</text>
+                            <text class="mud-charts-legend" x="50%" y="56%" dominant-baseline="middle" text-anchor="middle" fill="#212121" font-size="28" font-weight="700">@_totalInvoices</text>
+                        </CustomGraphics>
+                    </MudChart>
+                </MudPaper>
+            </MudItem>
+
+            <!-- Bar: المدفوعات حسب الشهر -->
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-4" Elevation="3" Style="border-radius: 12px; height: 100%;">
+                    <MudText Typo="Typo.h6" Class="mb-4" Style="color: #1976d2; font-weight: 500;">
+                        @Lang["PaymentsByMonth"]
+                    </MudText>
+                    <MudDivider Class="mb-4" />
+                    <MudChart ChartType="ChartType.Bar"
+                              Width="100%" Height="320px"
+                              ChartSeries="@_paymentsSeries"
+                              XAxisLabels="@_paymentsLabels"
+                              ChartOptions="@_paymentsBarChartOptions" />
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <!-- أفضل 5 عملاء من حيث الفواتير -->
+        <MudPaper Class="mt-4 pa-4" Elevation="3" Style="border-radius: 12px;">
+            <MudText Typo="Typo.h6" Class="mb-4" Style="color: #1976d2; font-weight: 500;">
+                @Lang["Top5Customers"]
+            </MudText>
+            <MudDivider Class="mb-4" />
+            <MudChart ChartType="ChartType.Bar"
+                      Width="100%" Height="320px"
+                      ChartSeries="@_topCustomersSeries"
+                      XAxisLabels="@_topCustomersLabels"
+                      ChartOptions="@_customersBarChartOptions" />
+        </MudPaper>
+    }
+</MudPaper>
+
+@code {
+    private bool _isLoading = true;
+    private string? _errorMessage;
+
+    // أعداد الفواتير
+    private int _totalInvoices;
+    private int _paidInvoices;
+    private int _pendingInvoices;
+    private int _overdueInvoices;
+
+    private decimal _totalAmount;
+    private decimal _paidAmount;
+    private decimal _pendingAmount;
+    private decimal _overdueAmount;
+
+    // إحصائيات إضافية
+    private int _totalCustomers;
+    private int _totalPayments;
+    private decimal _totalPaymentsAmount;
+
+    // بيانات رسمة الدائرة الحلق (Donut Chart)
+    private string[] _statusLabels = Array.Empty<string>();
+    private double[] _statusData = Array.Empty<double>();
+    
+    private ChartOptions _pieChartOptions = new()
+    {
+        ChartPalette = new[] 
+        { 
+            "#2E7D32",  // Green for Paid
+            "#F57C00",  // Orange for Pending
+            "#C62828"   // Red for Overdue
+        }
+    };
+    
+    private ChartOptions _paymentsBarChartOptions = new()
+    {
+        ChartPalette = new[] { "#0D47A1" },
+        YAxisLines = true,
+        InterpolationOption = InterpolationOption.Straight,
+        MaxNumYAxisTicks = 8
+    };
+    
+    private ChartOptions _customersBarChartOptions = new()
+    {
+        ChartPalette = new[] { "#00695C" },
+        YAxisLines = true,
+        InterpolationOption = InterpolationOption.Straight,
+        MaxNumYAxisTicks = 8
+    };
+
+    private string[] _paymentsLabels = Array.Empty<string>();
+    private List<ChartSeries> _paymentsSeries = new();
+
+    private string[] _topCustomersLabels = Array.Empty<string>();
+    private List<ChartSeries> _topCustomersSeries = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDashboardAsync();
+    }
+
+    private async Task LoadDashboardAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+
+        try
+        {
+            var today = DateTime.Today;
+
+            var currentUserId = await CurrentUserService.GetCurrentUserIdAsync();
+            if (!currentUserId.HasValue)
+            {
+                _totalInvoices = 0;
+                _totalCustomers = 0;
+                _totalPayments = 0;
+                return;
+            }
+
+            using var context = await DbFactory.CreateDbContextAsync();
+
+            var invoicesQuery = context.Invoices
+                .Include(i => i.Customer)
+                .Include(i => i.Payments)
+                .Where(i => i.UserId == currentUserId.Value)
+                .AsQueryable();
+
+            var invoices = await invoicesQuery.ToListAsync();
+
+            _totalInvoices = invoices.Count;
+            _totalAmount = invoices.Sum(i => i.TotalAmount);
+
+            var paid = invoices.Where(i => i.Status == "Paid").ToList();
+            _paidInvoices = paid.Count;
+            _paidAmount = paid.Sum(i => i.TotalAmount);
+
+            var pending = invoices
+                .Where(i => i.Status == "Pending" &&
+                            (!i.DueDate.HasValue || i.DueDate.Value.Date >= today))
+                .ToList();
+            _pendingInvoices = pending.Count;
+            _pendingAmount = pending.Sum(i => i.TotalAmount);
+
+            var overdue = invoices
+                .Where(i => i.DueDate.HasValue &&
+                            i.DueDate.Value.Date < today &&
+                            i.Status != "Paid" &&
+                            i.Status != "Cancelled")
+                .ToList();
+            _overdueInvoices = overdue.Count;
+            _overdueAmount = overdue.Sum(i => i.TotalAmount);
+
+            _totalCustomers = await context.Customers
+                .Where(c => c.UserId == currentUserId.Value)
+                .CountAsync();
+
+            var payments = await context.Payments
+                .Include(p => p.Invoice)
+                .ThenInclude(i => i.Customer)
+                .Where(p => p.Invoice.UserId == currentUserId.Value)
+                .ToListAsync();
+
+            if (payments.Any())
+            {
+                _totalPayments = payments.Count;
+                _totalPaymentsAmount = payments.Sum(p => p.Amount);
+            }
+            else
+            {
+                _totalPayments = paid.Count;
+                _totalPaymentsAmount = _paidAmount;
+            }
+
+            BuildStatusChart();
+            BuildPaymentsPerMonthChart(payments, paid);
+            BuildTopCustomersChart(invoices);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void BuildStatusChart()
+    {
+        _statusLabels = new[] { Lang["Paid"], Lang["Pending"], Lang["Overdue"] };
+        _statusData = new double[]
+        {
+            _paidInvoices,
+            _pendingInvoices,
+            _overdueInvoices
+        };
+    }
+
+    private void BuildPaymentsPerMonthChart(List<Payment> payments, List<Invoice> paidInvoices)
+    {
+        var labels = new List<string>();
+        var values = new List<double>();
+
+        // Get last 6 months
+        var endDate = DateTime.Now;
+        var startDate = endDate.AddMonths(-5);
+        
+        // Create a complete list of last 6 months
+        var monthsRange = Enumerable.Range(0, 6)
+            .Select(i => startDate.AddMonths(i))
+            .Select(d => new { Year = d.Year, Month = d.Month })
+            .ToList();
+
+        if (payments.Any())
+        {
+            var grouped = payments
+                .Where(p => p.Date >= startDate && p.Date <= endDate)
+                .GroupBy(p => new { p.Date.Year, p.Date.Month })
+                .ToDictionary(g => new { g.Key.Year, g.Key.Month }, g => g.Sum(x => x.Amount));
+
+            foreach (var month in monthsRange)
+            {
+                var monthName = new DateTime(month.Year, month.Month, 1).ToString("MMM yyyy");
+                labels.Add(monthName);
+                
+                if (grouped.TryGetValue(new { month.Year, month.Month }, out var total))
+                {
+                    values.Add((double)total);
+                }
+                else
+                {
+                    values.Add(0);
+                }
+            }
+        }
+        else if (paidInvoices.Any())
+        {
+            var grouped = paidInvoices
+                .Where(i => i.DateIssued >= startDate && i.DateIssued <= endDate)
+                .GroupBy(i => new { i.DateIssued.Year, i.DateIssued.Month })
+                .ToDictionary(g => new { g.Key.Year, g.Key.Month }, g => g.Sum(x => x.TotalAmount));
+
+            foreach (var month in monthsRange)
+            {
+                var monthName = new DateTime(month.Year, month.Month, 1).ToString("MMM yyyy");
+                labels.Add(monthName);
+                
+                if (grouped.TryGetValue(new { month.Year, month.Month }, out var total))
+                {
+                    values.Add((double)total);
+                }
+                else
+                {
+                    values.Add(0);
+                }
+            }
+        }
+        else
+        {
+            // Show last 6 months with zero values
+            foreach (var month in monthsRange)
+            {
+                var monthName = new DateTime(month.Year, month.Month, 1).ToString("MMM yyyy");
+                labels.Add(monthName);
+                values.Add(0);
+            }
+        }
+
+        _paymentsLabels = labels.ToArray();
+        _paymentsSeries = new List<ChartSeries>
+        {
+            new ChartSeries { Name = Lang["Payments"], Data = values.ToArray() }
+        };
+    }
+
+    private void BuildTopCustomersChart(List<Invoice> invoices)
+    {
+        var top = invoices
+            .Where(i => i.Customer != null)
+            .GroupBy(i => i.Customer!.Name)
+            .Select(g => new
+            {
+                CustomerName = g.Key,
+                Total = g.Sum(x => x.TotalAmount)
+            })
+            .OrderByDescending(x => x.Total)
+            .Take(5)
+            .ToList();
+
+        if (top.Any())
+        {
+            _topCustomersLabels = top.Select(t => t.CustomerName).ToArray();
+            _topCustomersSeries = new List<ChartSeries>
+            {
+                new ChartSeries { Name = Lang["TotalInvoices"], Data = top.Select(t => (double)t.Total).ToArray() }
+            };
+        }
+        else
+        {
+            // عرض رسالة "لا توجد بيانات" إذا لم يكن هناك عملاء
+            _topCustomersLabels = new[] { Lang["NoData"] };
+            _topCustomersSeries = new List<ChartSeries>
+            {
+                new ChartSeries { Name = Lang["TotalInvoices"], Data = new double[] { 0 } }
+            };
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        Lang.OnLanguageChanged += HandleLanguageChanged;
+        base.OnInitialized();
+    }
+
+    private async void HandleLanguageChanged()
+    {
+        await LoadDashboardAsync();
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        Lang.OnLanguageChanged -= HandleLanguageChanged;
+    }
+}

@@ -1,0 +1,223 @@
+@page "/users"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+
+@using System.Threading
+@using BillingSystem.Core.Models
+@using BillingSystem.Core.Interfaces
+@using MudBlazor
+
+@inject IUserService UserService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject LanguageService Lang
+@implements IDisposable
+
+<MudPaper Class="pa-4">
+    
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h5">@Lang["UserManagement"]</MudText>
+        <MudButton Color="Color.Primary" 
+                   Variant="Variant.Filled" 
+                   StartIcon="@Icons.Material.Filled.PersonAdd"
+                   OnClick="OpenAddUserDialog">
+            @Lang["AddUser"]
+        </MudButton>
+    </MudStack>
+
+    <!-- بحث + فلترة -->
+    <MudStack Row="true" Spacing="2" Class="mb-4">
+        <MudTextField T="string"
+                      Value="@_searchTerm"
+                      ValueChanged="OnSearchChanged"
+                      Placeholder="@Lang["SearchByNameOrEmail"]"
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search"
+                      Immediate="true"
+                      Class="flex-grow-1" />
+
+        <MudSelect T="string"
+                   Label="@Lang["Role"]"
+                   Value="@_selectedRole"
+                   ValueChanged="OnRoleChanged"
+                   Class="w-25">
+            <MudSelectItem Value="@("All")">@Lang["AllRoles"]</MudSelectItem>
+            <MudSelectItem Value="@("Admin")">@Lang["Admin"]</MudSelectItem>
+            <MudSelectItem Value="@("Accountant")">@Lang["Accountant"]</MudSelectItem>
+            <MudSelectItem Value="@("Customer")">@Lang["Customer"]</MudSelectItem>
+        </MudSelect>
+    </MudStack>
+
+    <MudTable T="User"
+              @ref="_table"
+              ServerData="LoadServerData"
+              Hover="true"
+              Dense="true"
+              Bordered="true"
+              Elevation="3"
+              RowsPerPage="10">
+
+        <HeaderContent>
+            <MudTh>@Lang["Name"]</MudTh>
+            <MudTh>@Lang["Email"]</MudTh>
+            <MudTh>@Lang["Role"]</MudTh>
+            <MudTh>@Lang["CreatedAt"]</MudTh>
+            <MudTh>@Lang["Actions"]</MudTh>
+        </HeaderContent>
+
+        <RowTemplate>
+            <MudTd DataLabel="@Lang["Name"]">@context.FullName</MudTd>
+            <MudTd DataLabel="@Lang["Email"]">@context.Email</MudTd>
+            <MudTd DataLabel="@Lang["Role"]">
+                <MudChip T="string" Color="@GetRoleColor(context.Role)" Size="Size.Small">
+                    @GetRoleDisplayName(context.Role)
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="@Lang["CreatedAt"]">@context.CreatedAt.ToString("dd/MM/yyyy")</MudTd>
+            <MudTd DataLabel="@Lang["Actions"]">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" 
+                               Color="Color.Primary" 
+                               Size="Size.Small"
+                               OnClick="@(() => OpenEditUserDialog(context))" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" 
+                               Color="Color.Error" 
+                               Size="Size.Small"
+                               OnClick="@(() => DeleteUser(context))" />
+            </MudTd>
+        </RowTemplate>
+
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
+
+    </MudTable>
+
+</MudPaper>
+
+@code {
+    private MudTable<User>? _table;
+    private string? _searchTerm;
+    private string _selectedRole = "All";
+
+    protected override void OnInitialized()
+    {
+        Lang.OnLanguageChanged += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        Lang.OnLanguageChanged -= StateHasChanged;
+    }
+
+    private async Task<TableData<User>> LoadServerData(TableState state, CancellationToken cancellationToken)
+    {
+        var page = state.Page + 1;
+        var pageSize = state.PageSize;
+
+        var result = await UserService.GetPagedAsync(page, pageSize, _searchTerm, _selectedRole);
+
+        return new TableData<User>
+        {
+            Items = result.Items,
+            TotalItems = result.TotalCount
+        };
+    }
+
+    private async Task OnSearchChanged(string? text)
+    {
+        _searchTerm = text;
+        if (_table is not null)
+            await _table.ReloadServerData();
+    }
+
+    private async Task OnRoleChanged(string? value)
+    {
+        _selectedRole = value ?? "All";
+        if (_table is not null)
+            await _table.ReloadServerData();
+    }
+
+    private async Task OpenAddUserDialog()
+    {
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+        var dialog = await DialogService.ShowAsync<UserEditDialog>(Lang["AddUser"], options);
+        var result = await dialog.Result;
+        
+        StateHasChanged(); // Force UI update
+
+        if (!result.Canceled)
+        {
+            if (_table is not null)
+                await _table.ReloadServerData();
+        }
+    }
+
+    private async Task OpenEditUserDialog(User user)
+    {
+        var parameters = new DialogParameters { ["User"] = user };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+        var dialog = await DialogService.ShowAsync<UserEditDialog>(Lang["Edit"] + " " + Lang["Customer"], parameters, options);
+        var result = await dialog.Result;
+        
+        StateHasChanged(); // Force UI update
+
+        if (!result.Canceled)
+        {
+            if (_table is not null)
+                await _table.ReloadServerData();
+        }
+    }
+
+    private async Task DeleteUser(User user)
+    {
+        var parameters = new DialogParameters
+        {
+            { "Title", Lang["Delete"] + " " + Lang["Customer"] },
+            { "Message", $"{Lang["Delete"]} '{user.FullName}'?" },
+            { "YesText", Lang["Delete"] },
+            { "CancelText", Lang["Cancel"] }
+        };
+
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            try
+            {
+                await UserService.DeleteAsync(user.Id);
+                Snackbar.Add(Lang["Success"], Severity.Success);
+                
+                if (_table is not null)
+                    await _table.ReloadServerData();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"{Lang["Error"]}: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private Color GetRoleColor(string role)
+    {
+        return role switch
+        {
+            "Admin" => Color.Error,
+            "Accountant" => Color.Primary,
+            "Customer" => Color.Success,
+            _ => Color.Default
+        };
+    }
+
+    private string GetRoleDisplayName(string role)
+    {
+        return role switch
+        {
+            "Admin" => Lang["Admin"],
+            "Accountant" => Lang["Accountant"],
+            "Customer" => Lang["Customer"],
+            _ => role
+        };
+    }
+}
+

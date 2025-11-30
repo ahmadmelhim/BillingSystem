@@ -1,0 +1,356 @@
+@page "/invoices"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+@using BillingSystem.Core.Models
+@inject IInvoiceService InvoiceService
+@inject IPaymentService PaymentService
+@inject IPdfService PdfService
+@inject IEmailService EmailService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject LanguageService Lang
+@inject IDialogService DialogService
+@inject IJSRuntime JSRuntime
+@implements IDisposable
+
+<MudPaper Class="pa-4">
+
+    <MudStack Row="true"
+              Justify="Justify.SpaceBetween"
+              AlignItems="AlignItems.Center"
+              Class="mb-4">
+        <MudText Typo="Typo.h5">@Lang["Invoices"]</MudText>
+
+        <MudButton Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="NewInvoice">
+            @Lang["AddInvoice"]
+        </MudButton>
+    </MudStack>
+
+    <!-- ??? + ????? -->
+    <MudStack Row="true" Spacing="2" Class="mb-4">
+        <MudTextField T="string"
+                      Value="@searchTerm"
+                      ValueChanged="OnSearchChanged"
+                      ValueExpression="@(() => searchTerm)"
+                      Placeholder="@Lang["SearchForInvoice"]"
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search"
+                      Immediate="true"
+                      Class="flex-grow-1" />
+
+        <MudSelect T="string"
+                   Label="@Lang["Status"]"
+                   Value="@selectedStatus"
+                   ValueChanged="OnStatusChanged"
+                   Class="w-25">
+            <MudSelectItem Value="@("All")">@Lang["AllStatuses"]</MudSelectItem>
+            <MudSelectItem Value="@("Pending")">@Lang["Pending"]</MudSelectItem>
+            <MudSelectItem Value="@("Paid")">@Lang["Paid"]</MudSelectItem>
+            <MudSelectItem Value="@("Overdue")">@Lang["Overdue"]</MudSelectItem>
+        </MudSelect>
+
+        <MudDateRangePicker Label="@Lang["DateRange"]"
+                            DateRange="_dateRange"
+                            DateRangeChanged="OnDateRangeChanged"
+                            Class="w-25" />
+    </MudStack>
+
+    <MudTable T="Invoice"
+              @ref="table"
+              ServerData="LoadServerData"
+              Hover="true"
+              Dense="true"
+              Bordered="true"
+              Elevation="3"
+              RowsPerPage="10"
+              Breakpoint="Breakpoint.Sm">
+
+        <HeaderContent>
+            <MudTh>@Lang["InvoiceNumber"]</MudTh>
+            <MudTh>@Lang["Customer"]</MudTh>
+            <MudTh>@Lang["DateIssued"]</MudTh>
+            <MudTh>@Lang["DueDate"]</MudTh>
+            <MudTh>@Lang["Status"]</MudTh>
+            <MudTh>@Lang["Amount"]</MudTh>
+            <MudTh>@Lang["Actions"]</MudTh>
+        </HeaderContent>
+
+        <RowTemplate>
+            <MudTd DataLabel="@Lang["InvoiceNumber"]">@context.InvoiceNumber</MudTd>
+            <MudTd DataLabel="@Lang["Customer"]">@context.Customer?.Name</MudTd>
+            <MudTd DataLabel="@Lang["DateIssued"]">@context.DateIssued.ToString("dd/MM/yyyy")</MudTd>
+            <MudTd DataLabel="@Lang["DueDate"]">@context.DueDate?.ToString("dd/MM/yyyy")</MudTd>
+            <MudTd DataLabel="@Lang["Status"]">
+                <MudChip T="string"
+                         Color="@GetStatusColor(context)"
+                         Variant="Variant.Filled"
+                         Size="Size.Small">
+                    @GetDisplayStatus(context)
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="@Lang["Amount"]">₪@context.TotalAmount.ToString("N2")</MudTd>
+
+            <MudTd DataLabel="@Lang["Actions"]">
+                <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
+                    <!-- Edit -->
+                    <MudStack AlignItems="AlignItems.Center" Spacing="0">
+                        <MudText Typo="Typo.caption" Style="font-size: 10px;">@Lang["EditInvoice"]</MudText>
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                       Color="Color.Primary"
+                                       Size="Size.Small"
+                                       OnClick="@(() => EditInvoice(context.Id))" />
+                    </MudStack>
+
+                    <!-- Delete -->
+                    <MudStack AlignItems="AlignItems.Center" Spacing="0">
+                        <MudText Typo="Typo.caption" Style="font-size: 10px;">@Lang["DeleteInvoice"]</MudText>
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                       Color="Color.Error"
+                                       Size="Size.Small"
+                                       OnClick="@(() => DeleteInvoice(context))" />
+                    </MudStack>
+
+                    <!-- Payments -->
+                    <MudStack AlignItems="AlignItems.Center" Spacing="0">
+                        <MudText Typo="Typo.caption" Style="font-size: 10px;">@Lang["ManagePayments"]</MudText>
+                        <MudIconButton Icon="@Icons.Material.Filled.Payment"
+                                       Color="Color.Info"
+                                       Size="Size.Small"
+                                       OnClick="@(() => ManagePayments(context.Id))" />
+                    </MudStack>
+
+                    <!-- PDF -->
+                    <MudStack AlignItems="AlignItems.Center" Spacing="0">
+                        <MudText Typo="Typo.caption" Style="font-size: 10px;">@Lang["DownloadPdf"]</MudText>
+                        <MudIconButton Icon="@Icons.Material.Filled.PictureAsPdf"
+                                       Color="Color.Secondary"
+                                       Size="Size.Small"
+                                       OnClick="@(() => DownloadPdf(context.Id))" />
+                    </MudStack>
+
+                    <!-- Email -->
+                    <MudStack AlignItems="AlignItems.Center" Spacing="0">
+                        <MudText Typo="Typo.caption" Style="font-size: 10px;">@Lang["SendEmail"]</MudText>
+                        <MudIconButton Icon="@Icons.Material.Filled.Email"
+                                       Color="Color.Primary"
+                                       Size="Size.Small"
+                                       OnClick="@(() => SendInvoiceEmailAsync(context.Id))" />
+                    </MudStack>
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
+
+    </MudTable>
+
+</MudPaper>
+
+@code {
+    private MudTable<Invoice>? table;
+    private string? searchTerm;
+    private string selectedStatus = "All";
+
+    private async Task<TableData<Invoice>> LoadServerData(TableState state, CancellationToken cancellationToken)
+    {
+        var page = state.Page + 1;
+        var pageSize = state.PageSize;
+
+        var result = await InvoiceService.GetPagedAsync(
+            page, 
+            pageSize, 
+            searchTerm, 
+            selectedStatus,
+            _dateRange?.Start,
+            _dateRange?.End);
+
+        return new TableData<Invoice>
+            {
+                Items = result.Items,
+                TotalItems = result.TotalCount
+            };
+    }
+
+    private async Task OnSearchChanged(string? text)
+    {
+        searchTerm = text;
+        if (table is not null)
+            await table.ReloadServerData();
+    }
+
+    private async Task OnStatusChanged(string? value)
+    {
+        selectedStatus = value ?? "All";
+        if (table is not null)
+            await table.ReloadServerData();
+    }
+
+    private DateRange _dateRange = new DateRange(null, null);
+
+    private async Task OnDateRangeChanged(DateRange range)
+    {
+        _dateRange = range;
+        if (table is not null)
+            await table.ReloadServerData();
+    }
+
+    private void NewInvoice() =>
+        Navigation.NavigateTo("/invoices/edit");
+
+    private void EditInvoice(int id) =>
+        Navigation.NavigateTo($"/invoices/edit/{id}");
+
+    private void ManagePayments(int id) =>
+        Navigation.NavigateTo($"/invoices/{id}/payments");
+
+
+    private async Task DeleteInvoice(Invoice invoice)
+    {
+        var parameters = new DialogParameters
+        {
+            { "Title", Lang["ConfirmDelete"] },
+            { "Message", string.Format(Lang["DeleteInvoiceConfirmation"], invoice.InvoiceNumber) },
+            { "YesText", Lang["Yes"] },
+            { "CancelText", Lang["Cancel"] }
+        };
+
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            try
+            {
+                await InvoiceService.DeleteAsync(invoice.Id);
+
+                Snackbar.Add(Lang["InvoiceDeletedSuccessfully"], Severity.Success);
+
+                if (table is not null)
+                    await table.ReloadServerData();
+            }
+            catch (InvalidOperationException ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
+            catch (Exception)
+            {
+                Snackbar.Add(Lang["ErrorDeletingInvoice"], Severity.Error);
+            }
+        }
+    }
+
+    //  تحميل PDF
+    private async Task DownloadPdf(int id)
+    {
+        try
+        {
+            var invoice = await InvoiceService.GetByIdAsync(id);
+            if (invoice == null)
+            {
+                Snackbar.Add(Lang["InvoiceNotFound"], Severity.Error);
+                return;
+            }
+
+            var pdfBytes = await PdfService.GenerateInvoicePdfAsync(id);
+            var fileName = $"Invoice-{invoice.InvoiceNumber}.pdf";
+
+            // Download using JavaScript interop
+            await JSRuntime.InvokeVoidAsync("downloadFile", fileName, Convert.ToBase64String(pdfBytes));
+            
+            Snackbar.Add(Lang["PdfDownloadedSuccessfully"], Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"{Lang["ErrorDownloadingPdf"]}: {ex.Message}", Severity.Error);
+        }
+    }
+
+    //  إرسال البريد الإلكتروني
+    private async Task SendInvoiceEmailAsync(int id)
+    {
+        try
+        {
+            var invoice = await InvoiceService.GetByIdAsync(id);
+            if (invoice == null)
+            {
+                Snackbar.Add(Lang["InvoiceNotFound"], Severity.Error);
+                return;
+            }
+
+            if (invoice.Customer == null || string.IsNullOrWhiteSpace(invoice.Customer.Email))
+            {
+                Snackbar.Add(Lang["NoEmailForCustomer"], Severity.Warning);
+                return;
+            }
+
+            var pdfBytes = await PdfService.GenerateInvoicePdfAsync(id);
+            var fileName = $"Invoice-{invoice.InvoiceNumber}.pdf";
+
+            var subject = $"فاتورة رقم {invoice.InvoiceNumber}";
+            var body =
+                $"عزيزي/عزيزتي {invoice.Customer.Name},\n\n" +
+                $"مرفق فاتورتك بتاريخ {invoice.DateIssued:yyyy-MM-dd} بمبلغ {invoice.TotalAmount:0.00} ₪.\n\n" +
+                $"مع التحية,\nBilling System";
+
+            await EmailService.SendEmailWithAttachmentAsync(
+                invoice.Customer.Email,
+                subject,
+                body,
+                pdfBytes,
+                fileName);
+
+            Snackbar.Add(Lang["EmailSentSuccessfully"], Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"{Lang["ErrorSendingEmail"]}: {ex.Message}", Severity.Error);
+        }
+    }
+
+
+
+    private string GetDisplayStatus(Invoice inv)
+    {
+        if (string.Equals(inv.Status, "Paid", StringComparison.OrdinalIgnoreCase))
+            return Lang["Paid"];
+
+        if (inv.DueDate.HasValue &&
+            inv.DueDate.Value.Date < DateTime.Today &&
+            !string.Equals(inv.Status, "Paid", StringComparison.OrdinalIgnoreCase))
+            return Lang["Overdue"];
+
+        if (string.Equals(inv.Status, "Overdue", StringComparison.OrdinalIgnoreCase))
+            return Lang["Overdue"];
+
+        // ?? ???? ???? (Pending ?? ?????)
+        return Lang["Pending"];
+    }
+
+    private Color GetStatusColor(Invoice inv)
+    {
+        var status = GetDisplayStatus(inv);
+
+        if (status == Lang["Paid"]) return Color.Success;
+        if (status == Lang["Overdue"]) return Color.Error;
+        if (status == Lang["Pending"]) return Color.Warning;
+        
+        return Color.Default;
+    }
+
+    protected override void OnInitialized()
+    {
+        Lang.OnLanguageChanged += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        Lang.OnLanguageChanged -= StateHasChanged;
+    }
+}
+

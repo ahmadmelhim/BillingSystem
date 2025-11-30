@@ -1,0 +1,247 @@
+@page "/reports/payments"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+@using BillingSystem.Infrastructure.Data
+@using BillingSystem.Core.Models
+@using Microsoft.EntityFrameworkCore
+@using MudBlazor
+
+@inject ApplicationDbContext Db
+@inject ISnackbar Snackbar
+@inject LanguageService Lang
+@inject ICurrentUserService CurrentUserService
+@implements IDisposable
+
+<MudPaper Class="pa-4">
+    <MudText Typo="Typo.h5" Class="mb-4">@Lang["PaymentsReport"]</MudText>
+
+    <!-- ??????? -->
+    <MudGrid Class="mb-4" GutterSize="3">
+        <MudItem xs="12" sm="4">
+            <MudTextField T="string"
+                          Label="@Lang["Search"]"
+                          @bind-Value="_searchText"
+                          Immediate="true" />
+        </MudItem>
+
+        <MudItem xs="12" sm="3">
+            <MudDatePicker T="DateTime?"
+                           Label="@Lang["From"]"
+                           @bind-Date="_fromDate"
+                           DateFormat="dd/MM/yyyy" />
+        </MudItem>
+
+        <MudItem xs="12" sm="3">
+            <MudDatePicker T="DateTime?"
+                           Label="@Lang["To"]"
+                           @bind-Date="_toDate"
+                           DateFormat="dd/MM/yyyy" />
+        </MudItem>
+
+        <MudItem xs="12" sm="2" Class="d-flex align-center">
+            <MudButton Color="Color.Primary"
+                       Variant="Variant.Filled"
+                       OnClick="ReloadAsync">
+                @Lang["Filter"]
+            </MudButton>
+            <MudButton Color="Color.Secondary"
+                       Variant="Variant.Outlined"
+                       Class="ml-2"
+                       OnClick="ClearFilters">
+                @Lang["Cancel"]
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+
+    @if (_isLoading)
+    {
+        <MudProgressCircular Indeterminate="true" />
+    }
+    else if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <MudAlert Severity="Severity.Error">@_errorMessage</MudAlert>
+    }
+    else
+    {
+        <!-- ???? ???? -->
+        <MudGrid Class="mb-4" GutterSize="3">
+            <MudItem xs="12" sm="4">
+                <MudPaper Class="pa-3">
+                    <MudText Typo="Typo.subtitle2">@Lang["TotalPayments"]</MudText>
+                    <MudText Typo="Typo.h6">@_rows.Count</MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" sm="4">
+                <MudPaper Class="pa-3">
+                    <MudText Typo="Typo.subtitle2">@Lang["TotalAmount"]</MudText>
+                    <MudText Typo="Typo.h6">₪@_totalAmount.ToString("N2")</MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" sm="4">
+                <MudPaper Class="pa-3">
+                    <MudText Typo="Typo.subtitle2">@Lang["AveragePayment"]</MudText>
+                    <MudText Typo="Typo.h6">
+                        @(_rows.Count == 0 ? "0.00" : "₪" + (_totalAmount / _rows.Count).ToString("N2"))
+                    </MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <!-- ???? ????????? -->
+        <MudTable Items="_rows" Dense="true" Hover="true" Bordered="true">
+            <HeaderContent>
+                <MudTh>@Lang["PaymentDate"]</MudTh>
+                <MudTh>@Lang["Customer"]</MudTh>
+                <MudTh>@Lang["InvoiceNumber"]</MudTh>
+                <MudTh>@Lang["PaymentMethod"]</MudTh>
+                <MudTh>@Lang["Amount"]</MudTh>
+                <MudTh>@Lang["Notes"]</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="@Lang["PaymentDate"]">
+                    @context.Date.ToString("dd/MM/yyyy")
+                </MudTd>
+                <MudTd DataLabel="@Lang["Customer"]">
+                    @context.CustomerName
+                </MudTd>
+                <MudTd DataLabel="@Lang["InvoiceNumber"]">
+                    @context.InvoiceNumber
+                </MudTd>
+                <MudTd DataLabel="@Lang["PaymentMethod"]">
+                    @context.Method
+                </MudTd>
+                <MudTd DataLabel="@Lang["Amount"]">
+                    ₪@context.Amount.ToString("N2")
+                </MudTd>
+                <MudTd DataLabel="@Lang["Notes"]">
+                    @context.Note
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudPaper>
+
+@code {
+    private bool _isLoading = true;
+    private string? _errorMessage;
+
+    private string? _searchText;
+    private DateTime? _fromDate;
+    private DateTime? _toDate;
+
+    private List<PaymentRow> _rows = new();
+    private decimal _totalAmount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+
+        try
+        {
+            var currentUserId = await CurrentUserService.GetCurrentUserIdAsync();
+            if (!currentUserId.HasValue)
+            {
+                _rows = new List<PaymentRow>();
+                _totalAmount = 0;
+                return;
+            }
+
+            var query = Db.Payments
+                .Include(p => p.Invoice)
+                .ThenInclude(i => i.Customer)
+                .Where(p => p.Invoice.UserId == currentUserId.Value)
+                .AsQueryable();
+
+            // ???? ??????? (????? ?????)
+            if (_fromDate.HasValue)
+            {
+                var from = _fromDate.Value.Date;
+                query = query.Where(p => p.Date.Date >= from);
+            }
+
+            if (_toDate.HasValue)
+            {
+                var to = _toDate.Value.Date;
+                query = query.Where(p => p.Date.Date <= to);
+            }
+
+            // ???? ????? (???? / ??? ?????? / ????? ?????)
+            if (!string.IsNullOrWhiteSpace(_searchText))
+            {
+                var term = _searchText.Trim();
+                query = query.Where(p =>
+                    (p.Invoice != null && p.Invoice.InvoiceNumber.Contains(term)) ||
+                    (p.Invoice != null && p.Invoice.Customer != null &&
+                     p.Invoice.Customer.Name.Contains(term)) ||
+                    (p.Method != null && p.Method.Contains(term)));
+            }
+
+            var result = await query
+                .OrderByDescending(p => p.Date)
+                .ThenByDescending(p => p.Id)
+                .ToListAsync();
+
+            _rows = result.Select(p => new PaymentRow
+                {
+                    Id = p.Id,
+                    Date = p.Date,
+                    Amount = p.Amount,
+                    Method = p.Method ?? string.Empty,
+                    Note = p.Notes ?? string.Empty,
+                    InvoiceNumber = p.Invoice?.InvoiceNumber ?? string.Empty,
+                    CustomerName = p.Invoice?.Customer?.Name ?? string.Empty
+                }).ToList();
+
+            _totalAmount = _rows.Sum(r => r.Amount);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ClearFilters()
+    {
+        _searchText = null;
+        _fromDate = null;
+        _toDate = null;
+        _ = ReloadAsync();
+    }
+
+    protected override void OnInitialized()
+    {
+        Lang.OnLanguageChanged += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        Lang.OnLanguageChanged -= StateHasChanged;
+    }
+
+    public class PaymentRow
+    {
+        public int Id { get; set; }
+        public DateTime Date { get; set; }
+        public decimal Amount { get; set; }
+
+        public string Method { get; set; } = string.Empty;
+        public string Note { get; set; } = string.Empty;
+
+        public string InvoiceNumber { get; set; } = string.Empty;
+        public string CustomerName { get; set; } = string.Empty;
+    }
+}
+

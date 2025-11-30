@@ -1,0 +1,213 @@
+@inherits LayoutComponentBase
+@inject LanguageService Lang
+@implements IDisposable
+
+<MudThemeProvider @ref="@_mudThemeProvider" @bind-IsDarkMode="@_isDarkMode" Theme="@_theme" />
+<MudDialogProvider />
+<MudSnackbarProvider SnackbarConfiguration="@_snackbarConfig" />
+<MudPopoverProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1">
+        @if (_isAuthenticated)
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((e) => DrawerToggle())" />
+        }
+        <div @onclick="@(() => Navigation.NavigateTo("/"))" style="cursor: pointer;">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="ml-2">
+                <MudIcon Icon="@Icons.Material.Filled.Receipt" Color="Color.Inherit" />
+                <MudText Typo="Typo.h6" Style="font-weight: 600;">Billing System</MudText>
+            </MudStack>
+        </div>
+        <MudSpacer />
+        
+        @if (_isAuthenticated && _currentUser != null)
+        {
+            <!-- User is logged in - show user info and logout -->
+            <!-- User is logged in - show user info and logout -->
+            <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Class="mr-2">
+                <ActivatorContent>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="cursor: pointer;">
+                        <MudText Typo="Typo.body1" Style="font-weight: 500;">@_currentUser.FullName</MudText>
+                        <MudAvatar Color="Color.Secondary" Size="Size.Medium">
+                            @_currentUser.FullName.Substring(0, 1).ToUpper()
+                        </MudAvatar>
+                        <MudIcon Icon="@Icons.Material.Filled.ArrowDropDown" Color="Color.Inherit" />
+                    </MudStack>
+                </ActivatorContent>
+                <ChildContent>
+                    <MudStack Class="pa-4" Spacing="2" Style="min-width: 200px;">
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">@Lang["SignIn"]</MudText>
+                            <MudText Typo="Typo.body1" Style="font-weight: 600;">@_currentUser.FullName</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@_currentUser.Email</MudText>
+                        </MudStack>
+                        <MudDivider />
+                        <MudMenuItem Icon="@Icons.Material.Filled.Logout" 
+                                     OnClick="HandleLogout"
+                                     IconColor="Color.Error">
+                            @Lang["Logout"]
+                        </MudMenuItem>
+                    </MudStack>
+                </ChildContent>
+            </MudMenu>
+        }
+        else
+        {
+            <!-- User is not logged in - show login/register buttons -->
+            <MudButton Href="/login" 
+                       Variant="Variant.Text" 
+                       Color="Color.Inherit" 
+                       StartIcon="@Icons.Material.Filled.Login"
+                       Style="text-transform: none; font-weight: 500; border-radius: 8px;"
+                       Class="mr-2">
+                @Lang["SignIn"]
+            </MudButton>
+            <MudButton Href="/register" 
+                       Variant="Variant.Text" 
+                       Color="Color.Inherit" 
+                       StartIcon="@Icons.Material.Filled.PersonAdd"
+                       Style="text-transform: none; font-weight: 500; border-radius: 8px;">
+                @Lang["SignUp"]
+            </MudButton>
+        }
+        
+        <MudDivider Vertical="true" FlexItem="true" Class="mx-3 my-2" Style="opacity: 0.3;" />
+        
+        <!-- Language Switcher -->
+        <LanguageSwitcher />
+        
+        <!-- Dark Mode Toggle -->
+        <MudTooltip Text="@(_isDarkMode ? "Light Mode" : "Dark Mode")">
+            <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)" 
+                           Color="Color.Inherit" 
+                           OnClick="@((e) => DarkModeToggle())"
+                           Style="border-radius: 8px;" />
+        </MudTooltip>
+    </MudAppBar>
+    
+    @if (_isAuthenticated)
+    {
+        <MudDrawer @bind-Open="@_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
+            <MudDrawerHeader Class="px-4 py-4" Style="background-color: var(--mud-palette-appbar-background);">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Large" Color="Color.Surface" />
+                    <MudText Typo="Typo.h6" Color="Color.Surface"><b>Billing System</b></MudText>
+                </MudStack>
+            </MudDrawerHeader>
+            <NavMenu />
+        </MudDrawer>
+    }
+    
+    <MudMainContent>
+        @if (_isAuthenticated)
+        {
+            <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+                @Body
+            </MudContainer>
+        }
+        else
+        {
+            @Body
+        }
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    bool _drawerOpen = true;
+    bool _isDarkMode = false;
+    private MudThemeProvider _mudThemeProvider = null!;
+    
+    private bool _isAuthenticated = false;
+    private UserInfo? _currentUser = null;
+
+    [Inject] private IAuthService AuthService { get; set; } = default!;
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+    [Inject] private ISnackbar Snackbar { get; set; } = default!;
+
+    private MudTheme _theme = new MudTheme()
+    {
+        PaletteLight = new PaletteLight()
+        {
+            Primary = Colors.Blue.Default,
+            Secondary = Colors.Cyan.Darken1,
+            Tertiary = Colors.Indigo.Default,
+            AppbarBackground = Colors.Blue.Darken2,
+        },
+        PaletteDark = new PaletteDark()
+        {
+            Primary = Colors.Blue.Lighten1,
+            Secondary = Colors.Cyan.Lighten1,
+            AppbarBackground = Colors.Blue.Darken3,
+        }
+    };
+
+    private SnackbarConfiguration _snackbarConfig = new()
+    {
+        PositionClass = Defaults.Classes.Position.TopEnd,
+        VisibleStateDuration = 2000, // 2 seconds
+        HideTransitionDuration = 500,
+        ShowTransitionDuration = 500,
+        MaxDisplayedSnackbars = 3
+    };
+
+    void DrawerToggle()
+    {
+        _drawerOpen = !_drawerOpen;
+    }
+
+    void DarkModeToggle()
+    {
+        _isDarkMode = !_isDarkMode;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        AuthService.OnAuthStateChanged += AuthStateChanged;
+        Lang.OnLanguageChanged += StateHasChanged;
+        await CheckAuthenticationState();
+    }
+
+    private async void AuthStateChanged()
+    {
+        await CheckAuthenticationState();
+        StateHasChanged();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _isDarkMode = await _mudThemeProvider.GetSystemDarkModeAsync();
+            await CheckAuthenticationState();
+            StateHasChanged();
+        }
+    }
+
+    private async Task CheckAuthenticationState()
+    {
+        _isAuthenticated = await AuthService.IsAuthenticatedAsync();
+        if (_isAuthenticated)
+        {
+            _currentUser = await AuthService.GetCurrentUserAsync();
+        }
+        else
+        {
+            _currentUser = null;
+        }
+    }
+
+    private async Task HandleLogout()
+    {
+        await AuthService.LogoutAsync();
+        Snackbar.Add(Lang["Success"], Severity.Success);
+        Navigation.NavigateTo("/", true);
+    }
+
+    public void Dispose()
+    {
+        AuthService.OnAuthStateChanged -= AuthStateChanged;
+        Lang.OnLanguageChanged -= StateHasChanged;
+    }
+}
+

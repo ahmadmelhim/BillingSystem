@@ -1,0 +1,422 @@
+@page "/admin/dashboard"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+
+@using BillingSystem.Core.Interfaces
+@using BillingSystem.Core.DTOs
+@using BillingSystem.Infrastructure.Services
+@using MudBlazor
+
+@inject IAdminService AdminService
+@inject ISystemSettingsService SettingsService
+@inject IAuditService AuditService
+@inject ISnackbar Snackbar
+@inject LanguageService Lang
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<!-- Admin Header / Distinctive Look -->
+<MudPaper Elevation="3" Class="pa-4 mb-6" Style="background: linear-gradient(to right, #1a237e, #283593); color: white; border-radius: 8px;">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudStack Row="true" AlignItems="AlignItems.Center">
+            <MudAvatar Color="Color.Error" Variant="Variant.Filled" Size="Size.Large" Class="mr-3">
+                <MudIcon Icon="@Icons.Material.Filled.Security" Size="Size.Medium" />
+            </MudAvatar>
+            <div>
+                <MudText Typo="Typo.h5" Style="font-weight: 700;">@Lang["AdminDashboard"]</MudText>
+                <MudText Typo="Typo.caption" Style="opacity: 0.8;">@Lang["SystemMonitoring"]</MudText>
+            </div>
+        </MudStack>
+        <MudChip T="string" Color="Color.Success" Size="Size.Small" Icon="@Icons.Material.Filled.Circle" Class="pulse-animation">@Lang["LiveStatus"]</MudChip>
+    </MudStack>
+</MudPaper>
+
+@if (_isLoading)
+{
+    <MudProgressCircular Indeterminate="true" Size="Size.Large" Class="mx-auto my-10" />
+}
+else if (_overview == null)
+{
+    <MudAlert Severity="Severity.Error">@Lang["Error"]: Failed to load data</MudAlert>
+}
+else
+{
+    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6">
+        <!-- Tab 1: System Overview -->
+        <MudTabPanel Text="@Lang["SystemOverview"]" Icon="@Icons.Material.Filled.Dashboard">
+            <MudGrid Spacing="3" Class="mb-6">
+                <!-- Users -->
+                <MudItem xs="12" sm="6" md="3">
+                    <MudPaper Elevation="2" Class="pa-4 d-flex flex-column justify-center align-center" Style="height: 100%; border-bottom: 4px solid var(--mud-palette-primary);">
+                        <MudIcon Icon="@Icons.Material.Filled.SupervisedUserCircle" Color="Color.Primary" Size="Size.Large" Class="mb-2" />
+                        <MudText Typo="Typo.h4" Style="font-weight: 700;">@_overview.TotalUsers</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">@Lang["TotalUsers"]</MudText>
+                    </MudPaper>
+                </MudItem>
+
+                <!-- Customers -->
+                <MudItem xs="12" sm="6" md="3">
+                    <MudPaper Elevation="2" Class="pa-4 d-flex flex-column justify-center align-center" Style="height: 100%; border-bottom: 4px solid var(--mud-palette-secondary);">
+                        <MudIcon Icon="@Icons.Material.Filled.BusinessCenter" Color="Color.Secondary" Size="Size.Large" Class="mb-2" />
+                        <MudText Typo="Typo.h4" Style="font-weight: 700;">@_overview.TotalCustomers</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">@Lang["TotalCustomers"]</MudText>
+                    </MudPaper>
+                </MudItem>
+
+                <!-- Invoices -->
+                <MudItem xs="12" sm="6" md="3">
+                    <MudPaper Elevation="2" Class="pa-4 d-flex flex-column justify-center align-center" Style="height: 100%; border-bottom: 4px solid var(--mud-palette-info);">
+                        <MudIcon Icon="@Icons.Material.Filled.Description" Color="Color.Info" Size="Size.Large" Class="mb-2" />
+                        <MudText Typo="Typo.h4" Style="font-weight: 700;">@_overview.TotalInvoices</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">@Lang["TotalInvoices"]</MudText>
+                    </MudPaper>
+                </MudItem>
+
+                <!-- Payments -->
+                <MudItem xs="12" sm="6" md="3">
+                    <MudPaper Elevation="2" Class="pa-4 d-flex flex-column justify-center align-center" Style="height: 100%; border-bottom: 4px solid var(--mud-palette-success);">
+                        <MudIcon Icon="@Icons.Material.Filled.Payments" Color="Color.Success" Size="Size.Large" Class="mb-2" />
+                        <MudText Typo="Typo.h4" Style="font-weight: 700;">@_overview.TotalPayments</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">@Lang["TotalPayments"]</MudText>
+                    </MudPaper>
+                </MudItem>
+
+                <!-- Quick Stats Row -->
+                <MudItem xs="12" md="6">
+                    <MudCard Elevation="3">
+                        <MudCardHeader>
+                            <CardHeaderContent>
+                                <MudText Typo="Typo.h6">@Lang["QuickStats"]</MudText>
+                            </CardHeaderContent>
+                        </MudCardHeader>
+                        <MudCardContent>
+                            <MudStack>
+                                <div class="d-flex justify-space-between align-center">
+                                    <MudText>@Lang["CollectionRate"]</MudText>
+                                    <MudText Color="Color.Success"><b>@_overview.CollectionRate.ToString("F1")%</b></MudText>
+                                </div>
+                                <MudProgressLinear Color="Color.Success" Value="@((double)_overview.CollectionRate)" Class="my-2" />
+                                
+                                <div class="d-flex justify-space-between align-center mt-2">
+                                    <MudText>@Lang["AverageInvoiceValue"]</MudText>
+                                    <MudText><b>₪ @_overview.AverageInvoiceValue.ToString("N0")</b></MudText>
+                                </div>
+                            </MudStack>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+
+        <!-- Tab 2: Activity Monitor -->
+        <MudTabPanel Text="@Lang["RecentActivity"]" Icon="@Icons.Material.Filled.History">
+            <MudCard Elevation="0">
+                <MudCardHeader>
+                    <CardHeaderActions>
+                        <MudIconButton Icon="@Icons.Material.Filled.Refresh" Color="Color.Default" OnClick="LoadDataAsync" />
+                    </CardHeaderActions>
+                </MudCardHeader>
+                <MudCardContent>
+                    @if (_recentActivities != null && _recentActivities.Any())
+                    {
+                        <MudTimeline TimelinePosition="TimelinePosition.Start">
+                            @foreach (var activity in _recentActivities)
+                            {
+                                <MudTimelineItem Color="@GetColor(activity.Color)" Size="Size.Small">
+                                    <ItemOpposite>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@activity.Timestamp.ToLocalTime().ToString("HH:mm")</MudText>
+                                        <MudText Typo="Typo.caption" Style="display:block">@activity.Timestamp.ToLocalTime().ToString("dd/MM/yyyy")</MudText>
+                                    </ItemOpposite>
+                                    <ItemContent>
+                                        <MudText Typo="Typo.body2" Style="font-weight: 600;">@activity.Description</MudText>
+                                        <MudText Typo="Typo.caption">@activity.User</MudText>
+                                    </ItemContent>
+                                </MudTimelineItem>
+                            }
+                        </MudTimeline>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Align="Align.Center" Class="py-4">@Lang["NoRecentActivity"]</MudText>
+                    }
+                </MudCardContent>
+            </MudCard>
+        </MudTabPanel>
+
+        <!-- Tab 3: System Health -->
+        <MudTabPanel Text="@Lang["SystemHealth"]" Icon="@Icons.Material.Filled.MonitorHeart">
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudCard Elevation="3">
+                        <MudCardHeader>
+                            <CardHeaderContent>
+                                <MudText Typo="Typo.h6">Database Metrics</MudText>
+                            </CardHeaderContent>
+                        </MudCardHeader>
+                        <MudCardContent>
+                            <MudList T="string" Dense="true">
+                                <MudListItem Icon="@Icons.Material.Filled.Storage">
+                                    <div class="d-flex justify-space-between">
+                                        <MudText>@Lang["DatabaseSize"]</MudText>
+                                        <MudText Color="Color.Primary"><b>@_systemHealth?.DatabaseSize</b></MudText>
+                                    </div>
+                                </MudListItem>
+                                <MudDivider />
+                                <MudListItem Icon="@Icons.Material.Filled.TableChart">
+                                    <div class="d-flex justify-space-between">
+                                        <MudText>@Lang["TablesCount"]</MudText>
+                                        <MudText><b>@_systemHealth?.TableCount</b></MudText>
+                                    </div>
+                                </MudListItem>
+                                <MudDivider />
+                                <MudListItem Icon="@Icons.Material.Filled.Info">
+                                    <div class="d-flex justify-space-between">
+                                        <MudText>@Lang["DBVersion"]</MudText>
+                                        <MudText Typo="Typo.caption">@_systemHealth?.DatabaseVersion</MudText>
+                                    </div>
+                                </MudListItem>
+                            </MudList>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+                
+                <MudItem xs="12" md="6">
+                    <MudCard Elevation="3">
+                        <MudCardHeader>
+                            <CardHeaderContent>
+                                <MudText Typo="Typo.h6">Record Counts</MudText>
+                            </CardHeaderContent>
+                        </MudCardHeader>
+                        <MudCardContent>
+                            <MudList T="string" Dense="true">
+                                <MudListItem>
+                                    <div class="d-flex justify-space-between">
+                                        <MudText>Users</MudText>
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Primary">@_systemHealth?.UsersCount</MudChip>
+                                    </div>
+                                </MudListItem>
+                                <MudListItem>
+                                    <div class="d-flex justify-space-between">
+                                        <MudText>Customers</MudText>
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Secondary">@_systemHealth?.CustomersCount</MudChip>
+                                    </div>
+                                </MudListItem>
+                                <MudListItem>
+                                    <div class="d-flex justify-space-between">
+                                        <MudText>Invoices</MudText>
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Info">@_systemHealth?.InvoicesCount</MudChip>
+                                    </div>
+                                </MudListItem>
+                                <MudListItem>
+                                    <div class="d-flex justify-space-between">
+                                        <MudText>Payments</MudText>
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Success">@_systemHealth?.PaymentsCount</MudChip>
+                                    </div>
+                                </MudListItem>
+                            </MudList>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+
+        <!-- Tab 4: Audit Logs -->
+        <MudTabPanel Text="@Lang["AuditLogs"]" Icon="@Icons.Material.Filled.Security">
+            <MudCard Elevation="0">
+                <MudCardHeader>
+                    <CardHeaderActions>
+                        <MudIconButton Icon="@Icons.Material.Filled.Refresh" Color="Color.Default" OnClick="LoadAuditLogsAsync" />
+                    </CardHeaderActions>
+                </MudCardHeader>
+                <MudCardContent>
+                    @if (_auditLogs != null && _auditLogs.Any())
+                    {
+                        <MudTable Items="@_auditLogs" Dense="true" Hover="true" Striped="true" Elevation="0">
+                            <HeaderContent>
+                                <MudTh>@Lang["Timestamp"]</MudTh>
+                                <MudTh>@Lang["User"]</MudTh>
+                                <MudTh>@Lang["Action"]</MudTh>
+                                <MudTh>@Lang["Entity"]</MudTh>
+                                <MudTh>@Lang["Details"]</MudTh>
+                                <MudTh>@Lang["IPAddress"]</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="@Lang["Timestamp"]">@context.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
+                                <MudTd DataLabel="@Lang["User"]">
+                                    <MudText Typo="Typo.body2">@context.UserName</MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@context.UserId</MudText>
+                                </MudTd>
+                                <MudTd DataLabel="@Lang["Action"]">
+                                    <MudChip T="string" Size="Size.Small" Color="@GetAuditColor(context.Action)">@context.Action</MudChip>
+                                </MudTd>
+                                <MudTd DataLabel="@Lang["Entity"]">@context.EntityName (@context.EntityId)</MudTd>
+                                <MudTd DataLabel="@Lang["Details"]">
+                                    <MudText Typo="Typo.body2" Style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                        @context.Details
+                                    </MudText>
+                                </MudTd>
+                                <MudTd DataLabel="@Lang["IPAddress"]">@context.IpAddress</MudTd>
+                            </RowTemplate>
+                            <PagerContent>
+                                <MudTablePager PageSizeOptions="new int[]{25, 50, 100}" />
+                            </PagerContent>
+                        </MudTable>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Align="Align.Center" Class="py-4">@Lang["NoAuditLogs"]</MudText>
+                    }
+                </MudCardContent>
+            </MudCard>
+        </MudTabPanel>
+
+        <!-- Tab 5: Settings -->
+        <MudTabPanel Text="@Lang["Settings"]" Icon="@Icons.Material.Filled.Settings">
+            <MudGrid Class="mt-4">
+                <MudItem xs="12">
+                    <MudCard Elevation="3">
+                        <MudCardHeader>
+                            <CardHeaderContent>
+                                <MudText Typo="Typo.h6">@Lang["GeneralSettings"]</MudText>
+                            </CardHeaderContent>
+                        </MudCardHeader>
+                        <MudCardContent>
+                            <MudGrid>
+                                <MudItem xs="12" md="6">
+                                    <MudTextField @bind-Value="_settings.CompanyName" Label="@Lang["CompanyName"]" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                </MudItem>
+                                <MudItem xs="12" md="3">
+                                    <MudTextField @bind-Value="_settings.CurrencySymbol" Label="@Lang["CurrencySymbol"]" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                </MudItem>
+                                <MudItem xs="12" md="3">
+                                    <MudNumericField @bind-Value="_settings.DefaultTaxRate" Label="@Lang["DefaultTaxRate"]" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Max="100" />
+                                </MudItem>
+                            </MudGrid>
+                            
+                            <MudDivider Class="my-4" />
+                            
+                            <MudText Typo="Typo.h6" Class="mb-3">@Lang["SystemControl"]</MudText>
+                            <MudStack>
+                                <MudSwitch T="bool" @bind-Checked="_settings.MaintenanceMode" Color="Color.Error" Label="@Lang["MaintenanceMode"]" />
+                                <MudSwitch T="bool" @bind-Checked="_settings.AllowNewRegistrations" Color="Color.Success" Label="@Lang["AllowRegistrations"]" />
+                            </MudStack>
+                        </MudCardContent>
+                        <MudCardActions>
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveSettingsAsync" StartIcon="@Icons.Material.Filled.Save">@Lang["SaveSettings"]</MudButton>
+                        </MudCardActions>
+                    </MudCard>
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+    </MudTabs>
+}
+
+<style>
+    .pulse-animation {
+        animation: pulse 2s infinite;
+    }
+    @@keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7); }
+        70% { box-shadow: 0 0 0 10px rgba(76, 175, 80, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0); }
+    }
+</style>
+
+@code {
+    private bool _isLoading = true;
+    private SystemOverviewDto? _overview;
+    private List<ActivityLogDto>? _recentActivities;
+    private SystemHealthDto? _systemHealth;
+    private BillingSystem.Core.Models.SystemSettings _settings = new();
+    private List<BillingSystem.Core.Models.AuditLog>? _auditLogs;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Lang.OnLanguageChanged += StateHasChanged;
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        try
+        {
+            _isLoading = true;
+            
+            // Parallel loading for performance
+            var overviewTask = AdminService.GetSystemOverviewAsync();
+            var activitiesTask = AdminService.GetRecentActivitiesAsync();
+            var healthTask = AdminService.GetSystemHealthAsync();
+            var settingsTask = SettingsService.GetSettingsAsync();
+
+            await Task.WhenAll(overviewTask, activitiesTask, healthTask, settingsTask);
+
+            _overview = await overviewTask;
+            _recentActivities = (await activitiesTask).ToList();
+            _systemHealth = await healthTask;
+            _settings = await settingsTask;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"{Lang["Error"]}: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task SaveSettingsAsync()
+    {
+        try
+        {
+            await SettingsService.SaveSettingsAsync(_settings);
+            Snackbar.Add(Lang["SettingsSaved"], Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"{Lang["Error"]}: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private Color GetColor(string colorName)
+    {
+        return colorName?.ToLower() switch
+        {
+            "primary" => Color.Primary,
+            "secondary" => Color.Secondary,
+            "success" => Color.Success,
+            "warning" => Color.Warning,
+            "error" => Color.Error,
+            "info" => Color.Info,
+            _ => Color.Default
+        };
+    }
+
+    private async Task LoadAuditLogsAsync()
+    {
+        try
+        {
+            _auditLogs = await AuditService.GetRecentLogsAsync(100);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"{Lang["Error"]}: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private Color GetAuditColor(string action)
+    {
+        return action?.ToLower() switch
+        {
+            "login" or "logout" => Color.Info,
+            "create" or "add" => Color.Success,
+            "update" or "edit" => Color.Warning,
+            "delete" or "remove" => Color.Error,
+            _ => Color.Default
+        };
+    }
+
+    public void Dispose()
+    {
+        Lang.OnLanguageChanged -= StateHasChanged;
+    }
+}

@@ -1,0 +1,152 @@
+@using BillingSystem.Core.Models
+@using BillingSystem.Infrastructure.Services.Business
+@using MudBlazor
+
+@inject IUserService UserService
+@inject ISnackbar Snackbar
+@inject LanguageService Lang
+
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form" Model="@_model">
+            <MudGrid>
+                <MudItem xs="12">
+                    <MudTextField T="string"
+                                  Label="الاسم الكامل"
+                                  @bind-Value="_model.FullName"
+                                  Required="true"
+                                  RequiredError="الاسم مطلوب" />
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudTextField T="string"
+                                  Label="البريد الإلكتروني"
+                                  @bind-Value="_model.Email"
+                                  Required="true"
+                                  RequiredError="البريد الإلكتروني مطلوب"
+                                  Validation="@(new EmailAddressAttribute())" />
+                </MudItem>
+
+                @if (!IsEdit)
+                {
+                    <MudItem xs="12">
+                        <MudTextField T="string"
+                                      Label="كلمة المرور"
+                                      @bind-Value="_model.Password"
+                                      Required="true"
+                                      RequiredError="كلمة المرور مطلوبة"
+                                      InputType="InputType.Password" />
+                    </MudItem>
+                }
+
+                <MudItem xs="12">
+                    <MudSelect T="string"
+                               Label="الدور"
+                               @bind-Value="_model.Role"
+                               Required="true">
+                        <MudSelectItem Value="@("Admin")">مدير</MudSelectItem>
+                        <MudSelectItem Value="@("Accountant")">محاسب</MudSelectItem>
+                        <MudSelectItem Value="@("Customer")">عميل</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">إلغاء</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">حفظ</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public User? User { get; set; }
+
+    private MudForm? _form;
+    private UserModel _model = new();
+    private bool IsEdit => User != null;
+
+    protected override void OnInitialized()
+    {
+        if (IsEdit && User != null)
+        {
+            _model.Id = User.Id;
+            _model.FullName = User.FullName;
+            _model.Email = User.Email;
+            _model.Role = User.Role;
+        }
+        else
+        {
+            _model.Role = "Customer";
+        }
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private async Task Submit()
+    {
+        if (_form != null)
+        {
+            await _form.Validate();
+            if (!_form.IsValid)
+                return;
+        }
+
+        try
+        {
+            if (IsEdit)
+            {
+                var user = new User
+                {
+                    Id = _model.Id,
+                    FullName = _model.FullName,
+                    Email = _model.Email,
+                    Role = _model.Role
+                };
+
+                await UserService.UpdateAsync(user);
+                Snackbar.Add("تم تحديث المستخدم بنجاح", Severity.Success);
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(_model.Password) || _model.Password.Length < 6)
+                {
+                    Snackbar.Add("كلمة المرور يجب أن تكون 6 أحرف على الأقل", Severity.Error);
+                    return;
+                }
+
+                var user = new User
+                {
+                    FullName = _model.FullName,
+                    Email = _model.Email,
+                    Role = _model.Role
+                };
+
+                await UserService.CreateAsync(user, _model.Password);
+                Snackbar.Add("تم إضافة المستخدم بنجاح", Severity.Success);
+            }
+
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"خطأ: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private class UserModel
+    {
+        public int Id { get; set; }
+        public string FullName { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+        public string Role { get; set; } = "Customer";
+    }
+}
+
+
+

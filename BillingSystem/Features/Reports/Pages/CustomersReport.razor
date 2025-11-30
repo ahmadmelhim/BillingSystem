@@ -1,0 +1,293 @@
+@page "/reports/customers"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+@using BillingSystem.Infrastructure.Data
+@using BillingSystem.Core.Models
+@using Microsoft.EntityFrameworkCore
+@using MudBlazor
+
+@inject ApplicationDbContext Db
+@inject ISnackbar Snackbar
+@inject LanguageService Lang
+@inject ICurrentUserService CurrentUserService
+@implements IDisposable
+
+<MudPaper Class="pa-4">
+    <MudText Typo="Typo.h5" Class="mb-4">@Lang["CustomersReport"]</MudText>
+
+    <!-- ??????? -->
+    <MudGrid Class="mb-4" GutterSize="3">
+        <MudItem xs="12" sm="4">
+            <MudTextField T="string"
+                          Label="@Lang["Search"]"
+                          @bind-Value="_searchText"
+                          Immediate="true" />
+        </MudItem>
+
+        <MudItem xs="12" sm="3">
+            <MudDatePicker T="DateTime?"
+                           Label="@Lang["From"]"
+                           @bind-Date="_fromDate"
+                           DateFormat="dd/MM/yyyy" />
+        </MudItem>
+
+        <MudItem xs="12" sm="3">
+            <MudDatePicker T="DateTime?"
+                           Label="@Lang["To"]"
+                           @bind-Date="_toDate"
+                           DateFormat="dd/MM/yyyy" />
+        </MudItem>
+
+        <MudItem xs="12" sm="2" Class="d-flex align-center">
+            <MudButton Color="Color.Primary"
+                       Variant="Variant.Filled"
+                       OnClick="ReloadAsync">
+                @Lang["Filter"]
+            </MudButton>
+            <MudButton Color="Color.Secondary"
+                       Variant="Variant.Outlined"
+                       Class="ml-2"
+                       OnClick="ClearFilters">
+                @Lang["Cancel"]
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+
+    @if (_isLoading)
+    {
+        <MudProgressCircular Indeterminate="true" />
+    }
+    else if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <MudAlert Severity="Severity.Error">@_errorMessage</MudAlert>
+    }
+    else
+    {
+        <!-- ???? ???? ??? -->
+        <MudGrid Class="mb-4" GutterSize="3">
+            <MudItem xs="12" sm="4">
+                <MudPaper Class="pa-3">
+                    <MudText Typo="Typo.subtitle2">@Lang["TotalCustomers"]</MudText>
+                    <MudText Typo="Typo.h6">@_rows.Count</MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" sm="4">
+                <MudPaper Class="pa-3">
+                    <MudText Typo="Typo.subtitle2">@Lang["TotalInvoicesValue"]</MudText>
+                    <MudText Typo="Typo.h6">₪@_totalInvoices.ToString("N2")</MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" sm="4">
+                <MudPaper Class="pa-3">
+                    <MudText Typo="Typo.subtitle2">@Lang["TotalPaymentsReceived"]</MudText>
+                    <MudText Typo="Typo.h6">₪@_totalPayments.ToString("N2")</MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <!-- ???? ??????? -->
+        <MudTable Items="_rows" Dense="true" Hover="true" Bordered="true">
+            <HeaderContent>
+                <MudTh>@Lang["Customer"]</MudTh>
+                <MudTh>@Lang["Email"]</MudTh>
+                <MudTh>@Lang["Phone"]</MudTh>
+                <MudTh align="right">@Lang["Invoices"]</MudTh>
+                <MudTh align="right">@Lang["TotalInvoices"]</MudTh>
+                <MudTh align="right">@Lang["TotalPayments"]</MudTh>
+                <MudTh align="right">@Lang["RemainingBalance"]</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="@Lang["Customer"]">@context.Name</MudTd>
+                <MudTd DataLabel="@Lang["Email"]">@context.Email</MudTd>
+                <MudTd DataLabel="@Lang["Phone"]">@context.Phone</MudTd>
+                <MudTd DataLabel="@Lang["Invoices"]" Align="Align.Right">@context.InvoicesCount</MudTd>
+                <MudTd DataLabel="@Lang["TotalInvoices"]" Align="Align.Right">₪@context.InvoicesTotal.ToString("N2")</MudTd>
+                <MudTd DataLabel="@Lang["TotalPayments"]" Align="Align.Right">₪@context.PaymentsTotal.ToString("N2")</MudTd>
+                <MudTd DataLabel="@Lang["RemainingBalance"]" Align="Align.Right">
+                    ₪@context.Balance.ToString("N2")
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudPaper>
+
+@code {
+    private bool _isLoading = true;
+    private string? _errorMessage;
+
+    private string? _searchText;
+    private DateTime? _fromDate;
+    private DateTime? _toDate;
+
+    private List<CustomerRow> _rows = new();
+
+    private decimal _totalInvoices;
+    private decimal _totalPayments;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+
+        try
+        {
+            var currentUserId = await CurrentUserService.GetCurrentUserIdAsync();
+            if (!currentUserId.HasValue)
+            {
+                _rows = new List<CustomerRow>();
+                _totalInvoices = 0;
+                _totalPayments = 0;
+                return;
+            }
+
+            var customersQuery = Db.Customers
+                .Where(c => c.UserId == currentUserId.Value)
+                .AsQueryable();
+
+            // ???? ????? ??????/???????/??????
+            if (!string.IsNullOrWhiteSpace(_searchText))
+            {
+                var term = _searchText.Trim();
+                customersQuery = customersQuery.Where(c =>
+                    c.Name.Contains(term) ||
+                    (c.Email != null && c.Email.Contains(term)) ||
+                    (c.Phone != null && c.Phone.Contains(term)));
+            }
+
+            var customers = await customersQuery
+                .OrderBy(c => c.Name)
+                .ToListAsync();
+
+            // تصفية الفواتير
+            var invQuery = Db.Invoices
+                .Where(i => i.UserId == currentUserId.Value)
+                .AsQueryable();
+
+            if (_fromDate.HasValue)
+            {
+                var from = _fromDate.Value.Date;
+                invQuery = invQuery.Where(i => i.DateIssued.Date >= from);
+            }
+
+            if (_toDate.HasValue)
+            {
+                var to = _toDate.Value.Date;
+                invQuery = invQuery.Where(i => i.DateIssued.Date <= to);
+            }
+
+            var invAgg = await invQuery
+                .GroupBy(i => i.CustomerId)
+                .Select(g => new
+                {
+                    CustomerId = g.Key,
+                    Count = g.Count(),
+                    Total = g.Sum(i => i.TotalAmount)
+                })
+                .ToListAsync();
+
+            // تصفية المدفوعات (عبر علاقة مع الفواتير)
+            var payQuery = Db.Payments
+                .Include(p => p.Invoice)
+                .Where(p => p.Invoice.UserId == currentUserId.Value)
+                .AsQueryable();
+
+            if (_fromDate.HasValue)
+            {
+                var from = _fromDate.Value.Date;
+                // ???? ????? ??? ????? ????? ????
+                payQuery = payQuery.Where(p => p.Date.Date >= from);
+            }
+
+            if (_toDate.HasValue)
+            {
+                var to = _toDate.Value.Date;
+                payQuery = payQuery.Where(p => p.Date.Date <= to);
+            }
+
+            var payAgg = await payQuery
+                .GroupBy(p => p.Invoice.CustomerId)
+                .Select(g => new
+                {
+                    CustomerId = g.Key,
+                    Total = g.Sum(p => p.Amount)
+                })
+                .ToListAsync();
+
+            _rows = customers
+                .Select(c =>
+                {
+                    var inv = invAgg.FirstOrDefault(x => x.CustomerId == c.Id);
+                    var pay = payAgg.FirstOrDefault(x => x.CustomerId == c.Id);
+
+                    var invTotal = inv?.Total ?? 0m;
+                    var invCount = inv?.Count ?? 0;
+                    var payTotal = pay?.Total ?? 0m;
+
+                    return new CustomerRow
+                        {
+                            CustomerId = c.Id,
+                            Name = c.Name,
+                            Email = c.Email,
+                            Phone = c.Phone,
+                            InvoicesCount = invCount,
+                            InvoicesTotal = invTotal,
+                            PaymentsTotal = payTotal
+                        };
+                })
+                .ToList();
+
+            _totalInvoices = _rows.Sum(r => r.InvoicesTotal);
+            _totalPayments = _rows.Sum(r => r.PaymentsTotal);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ClearFilters()
+    {
+        _searchText = null;
+        _fromDate = null;
+        _toDate = null;
+        _ = ReloadAsync();
+    }
+
+    protected override void OnInitialized()
+    {
+        Lang.OnLanguageChanged += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        Lang.OnLanguageChanged -= StateHasChanged;
+    }
+
+    public class CustomerRow
+    {
+        public int CustomerId { get; set; }
+
+        public string Name { get; set; } = string.Empty;
+        public string? Email { get; set; }
+        public string? Phone { get; set; }
+
+        public int InvoicesCount { get; set; }
+        public decimal InvoicesTotal { get; set; }
+        public decimal PaymentsTotal { get; set; }
+
+        public decimal Balance => InvoicesTotal - PaymentsTotal;
+    }
+}
+

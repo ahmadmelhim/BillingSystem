@@ -1,0 +1,198 @@
+@page "/customers/edit"
+@page "/customers/edit/{Id:int}"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+@using System.ComponentModel.DataAnnotations
+@using BillingSystem.Core.Models
+@using BillingSystem.Core.Interfaces
+@using MudBlazor
+
+@inject ICustomerService CustomerService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject LanguageService Lang
+@implements IDisposable
+
+<MudPaper Class="pa-4 mx-auto" Style="max-width:600px;">
+    <MudText Typo="Typo.h5" Class="mb-4">
+        @(IsNew ? Lang["NewCustomer"] : Lang["EditCustomer"])
+    </MudText>
+
+    @if (isLoading)
+    {
+        <MudProgressCircular Indeterminate="true" />
+    }
+    else
+    {
+        <MudForm Model="@model" @ref="form">
+            <MudStack Spacing="2">
+
+                <MudTextField T="string"
+                              Label="@Lang["Name"]"
+                              @bind-Value="model.Name"
+                              Required="true"
+                              RequiredError="@Lang["Required"]" />
+
+                <MudTextField T="string"
+                              Label="@Lang["Email"]"
+                              @bind-Value="model.Email"
+                              Placeholder="example@mail.com" />
+
+                <MudTextField T="string"
+                              Label="@Lang["Phone"]"
+                              @bind-Value="model.Phone" />
+
+                <MudTextField T="string"
+                              Label="@Lang["Address"]"
+                              @bind-Value="model.Address"
+                              Lines="3"
+                              TextArea="true" />
+
+                <MudStack Row="true" Spacing="2" Class="mt-4">
+                    <MudButton Color="Color.Primary"
+                               Variant="Variant.Filled"
+                               ButtonType="ButtonType.Button"
+                               OnClick="SubmitForm">
+                        @Lang["Save"]
+                    </MudButton>
+
+                    <MudButton Color="Color.Secondary"
+                               Variant="Variant.Outlined"
+                               OnClick="GoBack">
+                        @Lang["Cancel"]
+                    </MudButton>
+                </MudStack>
+
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <MudAlert Severity="Severity.Error" Class="mt-3">
+                        @errorMessage
+                    </MudAlert>
+                }
+
+            </MudStack>
+        </MudForm>
+    }
+</MudPaper>
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private MudForm? form;
+    private bool isLoading = true;
+    private string? errorMessage;
+
+    private CustomerEditModel model = new();
+
+    private bool IsNew => !Id.HasValue || Id.Value == 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (IsNew)
+        {
+            // ???? ????
+            model = new CustomerEditModel();
+            isLoading = false;
+        }
+        else
+        {
+            // ????? ?????? ???? ???????
+            var customer = await CustomerService.GetByIdAsync(Id!.Value);
+
+            if (customer == null)
+            {
+                errorMessage = Lang["CustomerNotFound"];
+                isLoading = false;
+                return;
+            }
+
+            model = new CustomerEditModel
+                {
+                    Id = customer.Id,
+                    Name = customer.Name,
+                    Email = customer.Email,
+                    Phone = customer.Phone,
+                    Address = customer.Address
+                };
+
+            isLoading = false;
+        }
+    }
+
+    private async Task SubmitForm()
+    {
+        errorMessage = null;
+
+        if (form is not null)
+            await form.Validate();
+
+        if (form is not null && !form.IsValid)
+            return;
+
+        await HandleValidSubmit();
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        try
+        {
+            // ???? ??? Customer ?? ??? model
+            var customer = new Customer
+                {
+                    Id = model.Id,
+                    Name = model.Name,
+                    Email = string.IsNullOrWhiteSpace(model.Email) ? null : model.Email,
+                    Phone = string.IsNullOrWhiteSpace(model.Phone) ? null : model.Phone,
+                    Address = string.IsNullOrWhiteSpace(model.Address) ? null : model.Address
+                };
+
+            if (IsNew)
+            {
+                await CustomerService.CreateAsync(customer);
+                Snackbar.Add(Lang["CustomerAddedSuccessfully"], Severity.Success);
+            }
+            else
+            {
+                await CustomerService.UpdateAsync(customer);
+                Snackbar.Add(Lang["CustomerUpdatedSuccessfully"], Severity.Success);
+            }
+
+            Navigation.NavigateTo("/customers");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo("/customers");
+    }
+
+    protected override void OnInitialized()
+    {
+        Lang.OnLanguageChanged += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        Lang.OnLanguageChanged -= StateHasChanged;
+    }
+
+    public class CustomerEditModel
+    {
+        public int Id { get; set; }
+
+        [Required(ErrorMessage = "NameRequired")]
+        public string Name { get; set; } = string.Empty;
+
+        [EmailAddress(ErrorMessage = "InvalidEmail")]
+        public string? Email { get; set; }
+
+        public string? Phone { get; set; }
+
+        public string? Address { get; set; }
+    }
+}
+

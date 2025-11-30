@@ -1,0 +1,7 @@
+{
+  "CompanyName": "Billing System",
+  "CurrencySymbol": "\u20AA",
+  "DefaultTaxRate": 15.0,
+  "MaintenanceMode": false,
+  "AllowNewRegistrations": true
+}
