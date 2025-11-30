@@ -35,7 +35,7 @@ public class ApplicationDbContext : DbContext
         // Customer -> Invoices
         modelBuilder.Entity<Invoice>()
             .HasOne(i => i.Customer)
-            .WithMany()
+            .WithMany(c => c.Invoices)
             .HasForeignKey(i => i.CustomerId)
             .OnDelete(DeleteBehavior.Restrict);
 
