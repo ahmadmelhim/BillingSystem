@@ -120,6 +120,8 @@ public class LanguageService
             ["PdfDownloadedSuccessfully"] = "✅ تم تحميل ملف PDF بنجاح",
             ["ErrorDownloadingPdf"] = "❌ فشل تحميل ملف PDF",
             ["NoEmailForCustomer"] = "⚠️ لا يوجد بريد إلكتروني مسجل لهذا العميل",
+            ["InvoiceEmailSubject"] = "فاتورة رقم {0}",
+            ["InvoiceEmailBody"] = "عزيزي/عزيزتي {0},\n\nمرفق فاتورتك بتاريخ {1} بمبلغ {2} ₪.\n\nمع التحية,\nBilling System",
 
             // Invoices & Payments Messages
             ["InvoiceNotFound"] = "الفاتورة غير موجودة",
@@ -438,6 +440,8 @@ public class LanguageService
             ["PdfDownloadedSuccessfully"] = "✅ PDF file downloaded successfully",
             ["ErrorDownloadingPdf"] = "❌ Failed to download PDF file",
             ["NoEmailForCustomer"] = "⚠️ No email address registered for this customer",
+            ["InvoiceEmailSubject"] = "Invoice #{0}",
+            ["InvoiceEmailBody"] = "Dear {0},\n\nPlease find attached your invoice dated {1} for the amount of {2}.\n\nBest regards,\nBilling System",
 
             // Invoices & Payments Messages
             ["InvoiceNotFound"] = "Invoice not found",

@@ -1,6 +1,5 @@
-using BillingSystem.Infrastructure.Data;
+using BillingSystem.Core.Interfaces.Repositories;
 using BillingSystem.Core.Models;
-using Microsoft.EntityFrameworkCore;
 
 namespace BillingSystem.Infrastructure.Services.Business;
 
@@ -15,11 +14,11 @@ public interface IUserService
 
 public class UserService : IUserService
 {
-    private readonly ApplicationDbContext _db;
+    private readonly IUserRepository _userRepository;
 
-    public UserService(ApplicationDbContext db)
+    public UserService(IUserRepository userRepository)
     {
-        _db = db;
+        _userRepository = userRepository;
     }
 
     public async Task<(IReadOnlyList<User> Items, int TotalCount)> GetPagedAsync(
@@ -28,80 +27,32 @@ public class UserService : IUserService
         string? search = null,
         string? role = null)
     {
-        var query = _db.Users.AsQueryable();
-
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            search = search.Trim();
-            query = query.Where(u => 
-                u.FullName.Contains(search) || 
-                u.Email.Contains(search));
-        }
-
-        if (!string.IsNullOrWhiteSpace(role) && role != "All")
-        {
-            query = query.Where(u => u.Role == role);
-        }
-
-        var total = await query.CountAsync();
-
-        var items = await query
-            .OrderByDescending(u => u.CreatedAt)
-            .Skip((pageIndex - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync();
-
-        return (items, total);
+        return await _userRepository.GetPagedAsync(pageIndex, pageSize, search, role);
     }
 
     public async Task<User?> GetByIdAsync(int id)
     {
-        return await _db.Users.FirstOrDefaultAsync(u => u.Id == id);
+        return await _userRepository.GetByIdAsync(id);
     }
 
     public async Task<User> CreateAsync(User user, string password)
     {
-        var exists = await _db.Users.AnyAsync(u => u.Email == user.Email);
-        if (exists)
-            throw new InvalidOperationException("البريد الإلكتروني مستخدم بالفعل");
-
-        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(password);
-        user.CreatedAt = DateTime.UtcNow;
-
-        _db.Users.Add(user);
-        await _db.SaveChangesAsync();
-
-        return user;
+        var passwordHash = BCrypt.Net.BCrypt.HashPassword(password);
+        return await _userRepository.CreateUserAsync(user, passwordHash);
     }
 
     public async Task UpdateAsync(User user)
     {
-        var existing = await _db.Users.FirstOrDefaultAsync(u => u.Id == user.Id);
-        if (existing == null)
-            throw new KeyNotFoundException("المستخدم غير موجود");
-
-        // Check email uniqueness if changed
-        if (existing.Email != user.Email)
-        {
-            var emailExists = await _db.Users.AnyAsync(u => u.Email == user.Email && u.Id != user.Id);
-            if (emailExists)
-                throw new InvalidOperationException("البريد الإلكتروني مستخدم بالفعل");
-        }
-
-        existing.FullName = user.FullName;
-        existing.Email = user.Email;
-        existing.Role = user.Role;
-
-        await _db.SaveChangesAsync();
+        await _userRepository.UpdateUserAsync(user);
     }
 
     public async Task DeleteAsync(int id)
     {
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == id);
-        if (user == null) return;
-
-        _db.Users.Remove(user);
-        await _db.SaveChangesAsync();
+        var user = await _userRepository.GetByIdAsync(id);
+        if (user != null)
+        {
+            await _userRepository.DeleteAsync(user.Id);
+        }
     }
 }
 

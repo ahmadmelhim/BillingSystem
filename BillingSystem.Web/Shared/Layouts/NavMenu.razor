@@ -1,0 +1,40 @@
+﻿@inject LanguageService Lang
+@implements IDisposable
+
+<MudNavMenu>
+    <MudDivider Class="my-2" />
+    
+    <!-- Regular User Menu (Hidden for Admin) -->
+    <AuthorizeView Roles="Accountant,Customer">
+        <MudText Typo="Typo.subtitle2" Class="px-4 mt-2 mb-1" Color="Color.Inherit">@Lang["Dashboard"]</MudText>
+        <MudNavLink Href="dashboard" Icon="@Icons.Material.Filled.Dashboard">@Lang["Dashboard"]</MudNavLink>
+        
+        <MudNavLink Href="customers" Icon="@Icons.Material.Filled.People">@Lang["Customers"]</MudNavLink>
+        <MudNavLink Href="invoices" Icon="@Icons.Material.Filled.Receipt">@Lang["Invoices"]</MudNavLink>
+        
+        <MudNavGroup Title="@Lang["Reports"]" Icon="@Icons.Material.Filled.BarChart" Expanded="true">
+            <MudNavLink Href="reports/customers" Icon="@Icons.Material.Filled.Person">@Lang["Customers"]</MudNavLink>
+            <MudNavLink Href="reports/invoices" Icon="@Icons.Material.Filled.Description">@Lang["Invoices"]</MudNavLink>
+            <MudNavLink Href="reports/payments" Icon="@Icons.Material.Filled.AttachMoney">@Lang["TotalPayments"]</MudNavLink>
+        </MudNavGroup>
+    </AuthorizeView>
+
+    <!-- Admin Menu (Only for Admin) -->
+    <AuthorizeView Roles="Admin">
+        <MudText Typo="Typo.subtitle2" Class="px-4 mt-2 mb-1" Color="Color.Inherit">@Lang["AdminDashboard"]</MudText>
+        <MudNavLink Href="admin/dashboard" Icon="@Icons.Material.Filled.AdminPanelSettings">@Lang["AdminDashboard"]</MudNavLink>
+        <MudNavLink Href="users" Icon="@Icons.Material.Filled.SupervisedUserCircle">@Lang["UserManagement"]</MudNavLink>
+    </AuthorizeView>
+</MudNavMenu>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Lang.OnLanguageChanged += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        Lang.OnLanguageChanged -= StateHasChanged;
+    }
+}

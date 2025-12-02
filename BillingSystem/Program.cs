@@ -10,6 +10,8 @@ using BillingSystem.Infrastructure.Services.Pdf;
 using BillingSystem.Infrastructure.Services.Localization;
 using BillingSystem.Infrastructure.Services; // For SystemSettingsService
 using BillingSystem.Infrastructure.BackgroundServices;
+using BillingSystem.Core.Interfaces.Repositories;
+using BillingSystem.Infrastructure.Repositories;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -25,9 +27,25 @@ var builder = WebApplication.CreateBuilder(args);
 QuestPDF.Settings.License = LicenseType.Community;
 
 // ===== DbContext =====
-// ===== DbContext =====
+// DbContextFactory for Blazor Server - allows creating multiple contexts
 builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// Scoped DbContext for dependency injection in repositories
+// Each request/circuit gets its own DbContext instance from the factory
+builder.Services.AddScoped<ApplicationDbContext>(sp =>
+{
+    var factory = sp.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
+    return factory.CreateDbContext();
+});
+
+// ===== Repositories =====
+builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
+builder.Services.AddScoped<ICustomerRepository, CustomerRepository>();
+builder.Services.AddScoped<IInvoiceRepository, InvoiceRepository>();
+builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IReportRepository, ReportRepository>();
 
 // ===== Blazor =====
 builder.Services.AddRazorPages();
@@ -135,19 +153,19 @@ var app = builder.Build();
 app.Use(async (context, next) =>
 {
     // Prevent MIME-sniffing attacks
-    context.Response.Headers.Add("X-Content-Type-Options", "nosniff");
+    context.Response.Headers.Append("X-Content-Type-Options", "nosniff");
     
     // Prevent clickjacking attacks
-    context.Response.Headers.Add("X-Frame-Options", "DENY");
+    context.Response.Headers.Append("X-Frame-Options", "DENY");
     
     // Enable XSS protection
-    context.Response.Headers.Add("X-XSS-Protection", "1; mode=block");
+    context.Response.Headers.Append("X-XSS-Protection", "1; mode=block");
     
     // Referrer Policy
-    context.Response.Headers.Add("Referrer-Policy", "strict-origin-when-cross-origin");
+    context.Response.Headers.Append("Referrer-Policy", "strict-origin-when-cross-origin");
     
     // Content Security Policy (basic)
-    context.Response.Headers.Add("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval';");
+    context.Response.Headers.Append("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval';");
     
     await next();
 });

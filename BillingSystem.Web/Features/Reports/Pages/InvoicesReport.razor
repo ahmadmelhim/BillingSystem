@@ -1,0 +1,318 @@
+@page "/reports/invoices"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+@using System.Linq
+@using BillingSystem.Core.Models
+@using BillingSystem.Core.Interfaces
+
+@inject IInvoiceService InvoiceService
+@inject ISnackbar Snackbar
+@inject LanguageService Lang
+@implements IDisposable
+
+<MudPaper Class="pa-4">
+    <MudText Typo="Typo.h5" Class="mb-4">@Lang["InvoicesReport"]</MudText>
+
+    <!-- ??????? -->
+    <MudGrid Class="mb-4" GutterSize="3">
+        <MudItem xs="12" sm="4">
+            <MudDatePicker T="DateTime?"
+                           Label="@Lang["From"]"
+                           @bind-Date="_fromDate"
+                           DateFormat="dd/MM/yyyy" />
+        </MudItem>
+
+        <MudItem xs="12" sm="4">
+            <MudDatePicker T="DateTime?"
+                           Label="@Lang["To"]"
+                           @bind-Date="_toDate"
+                           DateFormat="dd/MM/yyyy" />
+        </MudItem>
+
+        <MudItem xs="12" sm="4" Class="d-flex align-center">
+            <MudButton Color="Color.Primary"
+                       Variant="Variant.Filled"
+                       OnClick="ReloadAsync">
+                @Lang["Filter"]
+            </MudButton>
+            <MudButton Color="Color.Secondary"
+                       Variant="Variant.Outlined"
+                       Class="ml-2"
+                       OnClick="ClearFilters">
+                @Lang["Cancel"]
+            </MudButton>
+        </MudItem>
+
+        <MudItem xs="12">
+            <MudText Typo="Typo.subtitle2" Class="mb-1">@Lang["Status"]</MudText>
+
+            <!-- ChipSet ?????? -->
+            <MudChipSet T="string" Filter="true" MultiSelection="false">
+                <MudChip T="string"
+                         Color="@(_statusFilter == STATUS_ALL ? Color.Primary : Color.Default)"
+                         OnClick="@(() => ChangeStatus(STATUS_ALL))">
+                    @Lang["AllStatuses"]
+                </MudChip>
+
+                <MudChip T="string"
+                         Color="@(_statusFilter == STATUS_PENDING ? Color.Primary : Color.Default)"
+                         OnClick="@(() => ChangeStatus(STATUS_PENDING))">
+                    @Lang["Pending"]
+                </MudChip>
+
+                <MudChip T="string"
+                         Color="@(_statusFilter == STATUS_PAID ? Color.Primary : Color.Default)"
+                         OnClick="@(() => ChangeStatus(STATUS_PAID))">
+                    @Lang["Paid"]
+                </MudChip>
+
+                <MudChip T="string"
+                         Color="@(_statusFilter == STATUS_OVERDUE ? Color.Primary : Color.Default)"
+                         OnClick="@(() => ChangeStatus(STATUS_OVERDUE))">
+                    @Lang["Overdue"]
+                </MudChip>
+            </MudChipSet>
+        </MudItem>
+    </MudGrid>
+
+    @if (_isLoading)
+    {
+        <MudProgressCircular Indeterminate="true" />
+    }
+    else if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <MudAlert Severity="Severity.Error">@_errorMessage</MudAlert>
+    }
+    else
+    {
+        <!-- ???? ?????? -->
+        <MudGrid Class="mb-4" GutterSize="3">
+            <MudItem xs="12" sm="3">
+                <MudPaper Class="pa-3">
+                    <MudText Typo="Typo.subtitle2">@Lang["AllStatuses"]</MudText>
+                    <MudText Typo="Typo.h6">@_countAll @Lang["Invoices"]</MudText>
+                    <MudText Typo="Typo.body2">@Lang["Total"]: ₪@_sumAll.ToString("N2")</MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" sm="3">
+                <MudPaper Class="pa-3">
+                    <MudText Typo="Typo.subtitle2">@Lang["Paid"]</MudText>
+                    <MudText Typo="Typo.h6">@_countPaid @Lang["Invoices"]</MudText>
+                    <MudText Typo="Typo.body2">@Lang["Total"]: ₪@_sumPaid.ToString("N2")</MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" sm="3">
+                <MudPaper Class="pa-3">
+                    <MudText Typo="Typo.subtitle2">@Lang["Pending"]</MudText>
+                    <MudText Typo="Typo.h6">@_countPending @Lang["Invoices"]</MudText>
+                    <MudText Typo="Typo.body2">@Lang["Total"]: ₪@_sumPending.ToString("N2")</MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" sm="3">
+                <MudPaper Class="pa-3">
+                    <MudText Typo="Typo.subtitle2">@Lang["Overdue"]</MudText>
+                    <MudText Typo="Typo.h6">@_countOverdue @Lang["Invoices"]</MudText>
+                    <MudText Typo="Typo.body2">@Lang["Total"]: ₪@_sumOverdue.ToString("N2")</MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <!-- ???? ???????? -->
+        <MudTable Items="_filteredInvoices" Dense="true" Hover="true" Bordered="true">
+            <HeaderContent>
+                <MudTh>@Lang["InvoiceNumber"]</MudTh>
+                <MudTh>@Lang["Customer"]</MudTh>
+                <MudTh>@Lang["DateIssued"]</MudTh>
+                <MudTh>@Lang["DueDate"]</MudTh>
+                <MudTh>@Lang["Status"]</MudTh>
+                <MudTh>@Lang["Amount"]</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="@Lang["InvoiceNumber"]">@context.InvoiceNumber</MudTd>
+                <MudTd DataLabel="@Lang["Customer"]">@context.Customer?.Name</MudTd>
+                <MudTd DataLabel="@Lang["DateIssued"]">@context.DateIssued.ToString("dd/MM/yyyy")</MudTd>
+                <MudTd DataLabel="@Lang["DueDate"]">@context.DueDate?.ToString("dd/MM/yyyy")</MudTd>
+                <MudTd DataLabel="@Lang["Status"]">@GetArabicStatus(context)</MudTd>
+                <MudTd DataLabel="@Lang["Amount"]">₪@context.TotalAmount.ToString("N2")</MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudPaper>
+
+@code {
+    // ????? ???????
+    private const string STATUS_ALL = "All";
+    private const string STATUS_PENDING = "Pending";
+    private const string STATUS_PAID = "Paid";
+    private const string STATUS_OVERDUE = "Overdue";
+
+    private bool _isLoading = true;
+    private string? _errorMessage;
+
+    private DateTime? _fromDate;
+    private DateTime? _toDate;
+    private string _statusFilter = STATUS_ALL;
+
+    private List<Invoice> _allInvoices = new();
+    private List<Invoice> _filteredInvoices = new();
+
+    // ????? ??????
+    private int _countAll;
+    private int _countPaid;
+    private int _countPending;
+    private int _countOverdue;
+
+    private decimal _sumAll;
+    private decimal _sumPaid;
+    private decimal _sumPending;
+    private decimal _sumOverdue;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+
+        try
+        {
+            var result = await InvoiceService.GetPagedAsync(
+                pageIndex: 1,
+                pageSize: 1000,
+                search: null,
+                status: _statusFilter == STATUS_ALL ? null : _statusFilter);
+
+            _allInvoices = result.Items.ToList();
+
+            ApplyFilters();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ChangeStatus(string newStatus)
+    {
+        _statusFilter = newStatus;
+        ApplyFilters();
+    }
+
+    private void ApplyFilters()
+    {
+        var q = _allInvoices.AsQueryable();
+
+        if (_fromDate.HasValue)
+        {
+            var from = _fromDate.Value.Date;
+            q = q.Where(i => i.DateIssued.Date >= from);
+        }
+
+        if (_toDate.HasValue)
+        {
+            var to = _toDate.Value.Date;
+            q = q.Where(i => i.DateIssued.Date <= to);
+        }
+
+        // ????? ???? ??????
+        if (_statusFilter != STATUS_ALL)
+        {
+            var today = DateTime.Today;
+            
+            if (_statusFilter == STATUS_PAID)
+            {
+                q = q.Where(i => i.Status == STATUS_PAID);
+            }
+            else if (_statusFilter == STATUS_PENDING)
+            {
+                // ??? ???????? = ???? ?????? ???? ??????
+                q = q.Where(i => i.Status == STATUS_PENDING && 
+                                (!i.DueDate.HasValue || i.DueDate.Value.Date >= today));
+            }
+            else if (_statusFilter == STATUS_OVERDUE)
+            {
+                // ?????? = ??? ????? ??????? ???? ????? ??????
+                q = q.Where(i => i.DueDate.HasValue &&
+                                 i.DueDate.Value.Date < today &&
+                                 i.Status != STATUS_PAID);
+            }
+        }
+
+        _filteredInvoices = q
+            .OrderByDescending(i => i.DateIssued)
+            .ThenByDescending(i => i.Id)
+            .ToList();
+
+        ComputeSummary();
+    }
+
+    private void ComputeSummary()
+    {
+        var today = DateTime.Today;
+
+        _countAll = _filteredInvoices.Count;
+        _sumAll = _filteredInvoices.Sum(i => i.TotalAmount);
+
+        var paid = _filteredInvoices.Where(i => i.Status == STATUS_PAID).ToList();
+        _countPaid = paid.Count;
+        _sumPaid = paid.Sum(i => i.TotalAmount);
+
+        var pending = _filteredInvoices
+            .Where(i => i.Status == STATUS_PENDING &&
+                        (!i.DueDate.HasValue || i.DueDate.Value.Date >= today))
+            .ToList();
+        _countPending = pending.Count;
+        _sumPending = pending.Sum(i => i.TotalAmount);
+
+        var overdue = _filteredInvoices
+            .Where(i => i.DueDate.HasValue &&
+                        i.DueDate.Value.Date < today &&
+                        i.Status != STATUS_PAID)
+            .ToList();
+        _countOverdue = overdue.Count;
+        _sumOverdue = overdue.Sum(i => i.TotalAmount);
+    }
+
+    private void ClearFilters()
+    {
+        _fromDate = null;
+        _toDate = null;
+        _statusFilter = STATUS_ALL;
+        ApplyFilters();
+    }
+
+    private string GetArabicStatus(Invoice inv)
+    {
+        var today = DateTime.Today;
+        
+        if (inv.Status == STATUS_PAID)
+            return Lang["Paid"];
+        
+        if (inv.DueDate.HasValue && inv.DueDate.Value.Date < today && inv.Status != STATUS_PAID)
+            return Lang["Overdue"];
+        
+        return Lang["Pending"];
+    }
+
+    protected override void OnInitialized()
+    {
+        Lang.OnLanguageChanged += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        Lang.OnLanguageChanged -= StateHasChanged;
+    }
+}
+

@@ -1,0 +1,249 @@
+@page "/invoices/{InvoiceId:int}/payments"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+@using BillingSystem.Core.Models
+@using BillingSystem.Core.Interfaces
+@using MudBlazor
+
+@inject IInvoiceService InvoiceService
+@inject IPaymentService PaymentService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject LanguageService Lang
+@implements IDisposable
+
+<MudPaper Class="pa-4">
+    
+    @if (_isLoading)
+    {
+        <MudProgressCircular Indeterminate="true" />
+    }
+    else if (_invoice == null)
+    {
+        <MudAlert Severity="Severity.Error">@Lang["InvoiceNotFound"]</MudAlert>
+    }
+    else
+    {
+        <!-- معلومات الفاتورة -->
+        <MudCard Elevation="2" Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h5">@Lang["Invoice"] #@_invoice.InvoiceNumber</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudChip T="string" Color="@GetStatusColor(_invoice)" Variant="Variant.Filled">
+                        @GetDisplayStatus(_invoice)
+                    </MudChip>
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudGrid>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudText Typo="Typo.body2" Color="Color.Default">@Lang["Customer"]</MudText>
+                        <MudText Typo="Typo.body1"><strong>@_invoice.Customer?.Name</strong></MudText>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudText Typo="Typo.body2" Color="Color.Default">@Lang["DateIssued"]</MudText>
+                        <MudText Typo="Typo.body1"><strong>@_invoice.DateIssued.ToString("dd/MM/yyyy")</strong></MudText>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudText Typo="Typo.body2" Color="Color.Default">@Lang["TotalAmount"]</MudText>
+                        <MudText Typo="Typo.h6" Color="Color.Primary"><strong>₪@_invoice.TotalAmount.ToString("N2")</strong></MudText>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudText Typo="Typo.body2" Color="Color.Default">@Lang["PaidAmount"]</MudText>
+                        <MudText Typo="Typo.h6" Color="Color.Success"><strong>₪@_invoice.PaidAmount.ToString("N2")</strong></MudText>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudText Typo="Typo.body2" Color="Color.Default">@Lang["RemainingAmount"]</MudText>
+                        <MudText Typo="Typo.h6" Color="@(_invoice.RemainingAmount > 0 ? Color.Warning : Color.Success)">
+                            <strong>₪@_invoice.RemainingAmount.ToString("N2")</strong>
+                        </MudText>
+                    </MudItem>
+                </MudGrid>
+            </MudCardContent>
+        </MudCard>
+
+        <!-- سجل المدفوعات -->
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+            <MudText Typo="Typo.h6">@Lang["PaymentHistory"]</MudText>
+            @if (_invoice.RemainingAmount > 0)
+            {
+                <MudButton Color="Color.Primary" 
+                           Variant="Variant.Filled" 
+                           StartIcon="@Icons.Material.Filled.Add"
+                           OnClick="OpenAddPaymentDialog">
+                    @Lang["AddPayment"]
+                </MudButton>
+            }
+        </MudStack>
+
+        @if (!_payments.Any())
+        {
+            <MudAlert Severity="Severity.Info">@Lang["NoPaymentsForInvoice"]</MudAlert>
+        }
+        else
+        {
+            <MudTable Items="_payments" Hover="true" Dense="true" Bordered="true" Elevation="2">
+                <HeaderContent>
+                    <MudTh>@Lang["Date"]</MudTh>
+                    <MudTh>@Lang["Amount"]</MudTh>
+                    <MudTh>@Lang["Method"]</MudTh>
+                    <MudTh>@Lang["Reference"]</MudTh>
+                    <MudTh>@Lang["Notes"]</MudTh>
+                    <MudTh>@Lang["Actions"]</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="@Lang["Date"]">@context.Date.ToString("dd/MM/yyyy")</MudTd>
+                    <MudTd DataLabel="@Lang["Amount"]">
+                        <MudText Typo="Typo.body1" Color="Color.Success"><strong>₪@context.Amount.ToString("N2")</strong></MudText>
+                    </MudTd>
+                    <MudTd DataLabel="@Lang["Method"]">@context.Method</MudTd>
+                    <MudTd DataLabel="@Lang["Reference"]">@context.Reference</MudTd>
+                    <MudTd DataLabel="@Lang["Notes"]">@context.Notes</MudTd>
+                    <MudTd DataLabel="@Lang["Actions"]">
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" 
+                                       Color="Color.Error" 
+                                       Size="Size.Small"
+                                       OnClick="@(() => DeletePayment(context))" />
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+
+        <!-- أزرار الإجراءات -->
+        <MudStack Row="true" Spacing="2" Class="mt-4">
+            <MudButton Color="Color.Secondary" 
+                       Variant="Variant.Outlined"
+                       OnClick="GoBack">
+                @Lang["Back"]
+            </MudButton>
+        </MudStack>
+    }
+
+</MudPaper>
+
+@code {
+    [Parameter] public int InvoiceId { get; set; }
+
+    private bool _isLoading = true;
+    private Invoice? _invoice;
+    private List<Payment> _payments = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        Lang.OnLanguageChanged += StateHasChanged;
+        await LoadDataAsync();
+    }
+
+    public void Dispose()
+    {
+        Lang.OnLanguageChanged -= StateHasChanged;
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            _invoice = await InvoiceService.GetByIdAsync(InvoiceId);
+            if (_invoice != null)
+            {
+                _payments = (await PaymentService.GetByInvoiceIdAsync(InvoiceId)).ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"{Lang["ErrorLoadingData"]}: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task OpenAddPaymentDialog()
+    {
+        var parameters = new DialogParameters
+        {
+            ["Invoice"] = _invoice!,
+            ["RemainingAmount"] = _invoice!.RemainingAmount
+        };
+
+        var dialog = await DialogService.ShowAsync<AddPaymentDialog>(Lang["AddPaymentTitle"], parameters);
+        var result = await dialog.Result;
+        
+        StateHasChanged(); // Force UI update after dialog closes
+
+        if (!result.Canceled && result.Data is Payment payment)
+        {
+            try
+            {
+                await PaymentService.CreateAsync(payment);
+                Snackbar.Add(Lang["PaymentAddedSuccessfully"], Severity.Success);
+                await LoadDataAsync();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"{Lang["Error"]}: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task DeletePayment(Payment payment)
+    {
+        var parameters = new DialogParameters
+        {
+            { "Title", Lang["ConfirmDelete"] },
+            { "Message", string.Format(Lang["ConfirmDeletePayment"], payment.Amount.ToString("N2")) },
+            { "YesText", Lang["Delete"] },
+            { "CancelText", Lang["Cancel"] }
+        };
+
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            try
+            {
+                await PaymentService.DeleteAsync(payment.Id);
+                Snackbar.Add(Lang["PaymentDeletedSuccessfully"], Severity.Success);
+                await LoadDataAsync();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"{Lang["Error"]}: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo("/invoices");
+    }
+
+    private string GetDisplayStatus(Invoice inv)
+    {
+        if (string.Equals(inv.Status, "Paid", StringComparison.OrdinalIgnoreCase))
+            return Lang["Paid"];
+
+        if (inv.DueDate.HasValue && 
+            inv.DueDate.Value.Date < DateTime.Today && 
+            !string.Equals(inv.Status, "Paid", StringComparison.OrdinalIgnoreCase))
+            return Lang["Overdue"];
+
+        return Lang["Pending"];
+    }
+
+    private Color GetStatusColor(Invoice inv)
+    {
+        var status = GetDisplayStatus(inv);
+        if (status == Lang["Paid"]) return Color.Success;
+        if (status == Lang["Overdue"]) return Color.Error;
+        return Color.Warning;
+    }
+}
+

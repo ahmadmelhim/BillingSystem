@@ -1,0 +1,56 @@
+@using MudBlazor
+@inject LanguageService Lang
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="2">
+            <MudStack Row="true" Spacing="1">
+                <MudIcon Icon="@Icons.Material.Filled.Warning"
+                         Color="Color.Error"
+                         Size="Size.Medium" />
+                <MudText Typo="Typo.h6">
+                    @Title
+                </MudText>
+            </MudStack>
+
+            <MudText Class="mt-2">
+                @Message
+            </MudText>
+        </MudStack>
+    </DialogContent>
+
+    <DialogActions>
+        <MudButton Variant="Variant.Outlined"
+                   Color="Color.Default"
+                   OnClick="@OnCancel">
+            @CancelText
+        </MudButton>
+
+        <MudButton Color="Color.Error"
+                   Variant="Variant.Filled"
+                   OnClick="@OnConfirm">
+            @YesText
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string Title { get; set; } = string.Empty;
+    [Parameter] public string Message { get; set; } = string.Empty;
+    [Parameter] public string? YesText { get; set; }
+    [Parameter] public string? CancelText { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (string.IsNullOrEmpty(Title)) Title = Lang["ConfirmDelete"];
+        if (string.IsNullOrEmpty(YesText)) YesText = Lang["Delete"];
+        if (string.IsNullOrEmpty(CancelText)) CancelText = Lang["Cancel"];
+    }
+
+    private void OnCancel() => MudDialog.Cancel();
+
+    private void OnConfirm() => MudDialog.Close(DialogResult.Ok(true));
+}

@@ -13,7 +13,7 @@
         {
             <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((e) => DrawerToggle())" />
         }
-        <div @onclick="@(() => Navigation.NavigateTo("/"))" style="cursor: pointer;">
+        <div @onclick="NavigateHome" style="cursor: pointer;">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="ml-2">
                 <MudIcon Icon="@Icons.Material.Filled.Receipt" Color="Color.Inherit" />
                 <MudText Typo="Typo.h6" Style="font-weight: 600;">Billing System</MudText>
@@ -144,11 +144,13 @@
 
     private SnackbarConfiguration _snackbarConfig = new()
     {
-        PositionClass = Defaults.Classes.Position.TopEnd,
-        VisibleStateDuration = 2000, // 2 seconds
+        PositionClass = Defaults.Classes.Position.TopCenter,
+        VisibleStateDuration = 5000, // 5 seconds
         HideTransitionDuration = 500,
         ShowTransitionDuration = 500,
-        MaxDisplayedSnackbars = 3
+        MaxDisplayedSnackbars = 5,
+        ShowCloseIcon = true,
+        SnackbarVariant = Variant.Filled
     };
 
     void DrawerToggle()
@@ -202,6 +204,18 @@
         await AuthService.LogoutAsync();
         Snackbar.Add(Lang["Success"], Severity.Success);
         Navigation.NavigateTo("/", true);
+    }
+
+    private void NavigateHome()
+    {
+        if (_currentUser != null && _currentUser.Role == "Admin")
+        {
+            Navigation.NavigateTo("/admin/dashboard");
+        }
+        else
+        {
+            Navigation.NavigateTo("/dashboard");
+        }
     }
 
     public void Dispose()

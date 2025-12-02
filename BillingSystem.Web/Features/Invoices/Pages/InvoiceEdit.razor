@@ -1,0 +1,350 @@
+@page "/invoices/edit"
+@page "/invoices/edit/{Id:int}"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+@using System.ComponentModel.DataAnnotations
+@using System.Linq
+@using BillingSystem.Core.Models
+@using BillingSystem.Core.Interfaces
+@using MudBlazor
+
+@inject IInvoiceService InvoiceService
+@inject ICustomerService CustomerService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject LanguageService Lang
+@implements IDisposable
+
+<MudPaper Class="pa-4 mx-auto" Style="max-width:800px;">
+    <MudText Typo="Typo.h5" Class="mb-4">
+        @(IsNew ? Lang["NewInvoice"] : Lang["EditInvoice"])
+    </MudText>
+
+    @if (isLoading)
+    {
+        <MudProgressCircular Indeterminate="true" />
+    }
+    else
+    {
+        <MudForm Model="@model" @ref="form">
+
+            <MudGrid GutterSize="3">
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="int"
+                               Label="@Lang["SelectCustomer"]"
+                               Required="true"
+                               RequiredError="@Lang["Required"]"
+                               Value="@model.CustomerId"
+                               ValueChanged="@(v => model.CustomerId = v)">
+                        @foreach (var c in customers)
+                        {
+                            <MudSelectItem Value="@c.Id">@c.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+
+                <MudItem xs="12" sm="3">
+                    <MudDatePicker T="DateTime?"
+                                   Label="@Lang["DateIssued"]"
+                                   Date="@model.DateIssued"
+                                   DateChanged="@(d => model.DateIssued = d ?? model.DateIssued)"
+                                   Required="true" />
+                </MudItem>
+
+                <MudItem xs="12" sm="3">
+                    <MudDatePicker T="DateTime?"
+                                   Label="@Lang["DueDate"]"
+                                   Date="@model.DueDate"
+                                   DateChanged="@(d => model.DueDate = d)" />
+                </MudItem>
+
+
+
+                <MudItem xs="12" sm="4">
+                    <MudSelect T="string"
+                               Label="@Lang["Status"]"
+                               Value="@model.Status"
+                               ValueChanged="@(v => model.Status = v)">
+                        <MudSelectItem Value="@("Pending")">@Lang["Pending"]</MudSelectItem>
+                        <MudSelectItem Value="@("Paid")">@Lang["Paid"]</MudSelectItem>
+                        <MudSelectItem Value="@("Overdue")">@Lang["Overdue"]</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+
+            </MudGrid>
+
+            <MudDivider Class="my-4" />
+
+            <MudText Typo="Typo.subtitle1" Class="mb-2">@Lang["InvoiceItems"]</MudText>
+
+            <MudTable T="InvoiceItemEditModel"
+                      Items="model.Items"
+                      Dense="true"
+                      Bordered="true"
+                      Hover="true">
+
+                <ToolBarContent>
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Add"
+                               OnClick="AddItem">
+                        @Lang["AddItem"]
+                    </MudButton>
+                </ToolBarContent>
+
+                <HeaderContent>
+                    <MudTh>@Lang["Description"]</MudTh>
+                    <MudTh>@Lang["Quantity"]</MudTh>
+                    <MudTh>@Lang["UnitPrice"]</MudTh>
+                    <MudTh>@Lang["Total"]</MudTh>
+                    <MudTh></MudTh>
+                </HeaderContent>
+
+                <RowTemplate>
+                    <MudTd DataLabel="@Lang["Description"]">
+                        <MudTextField T="string"
+                                      @bind-Value="context.Description"
+                                      Immediate="true" />
+                    </MudTd>
+                    <MudTd DataLabel="@Lang["Quantity"]">
+                        <MudNumericField T="decimal"
+                                         @bind-Value="context.Quantity"
+                                         Immediate="true" />
+                    </MudTd>
+                    <MudTd DataLabel="@Lang["UnitPrice"]">
+                        <MudNumericField T="decimal"
+                                         @bind-Value="context.UnitPrice"
+                                         Immediate="true" />
+                    </MudTd>
+                    <MudTd DataLabel="@Lang["Total"]">
+                        ₪@context.Total.ToString("N2")
+                    </MudTd>
+                    <MudTd>
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                       Color="Color.Error"
+                                       OnClick="@(() => RemoveItem(context))" />
+                    </MudTd>
+                </RowTemplate>
+
+            </MudTable>
+
+            <MudText Typo="Typo.subtitle1" Class="mt-3">
+                @Lang["Total"]: <b>₪@model.TotalAmount.ToString("N2")</b>
+            </MudText>
+
+            <MudStack Row="true" Spacing="2" Class="mt-4">
+                <MudButton Color="Color.Primary"
+                           Variant="Variant.Filled"
+                           ButtonType="ButtonType.Button"
+                           OnClick="SubmitForm">
+                    @Lang["Save"]
+                </MudButton>
+
+                <MudButton Color="Color.Secondary"
+                           Variant="Variant.Outlined"
+                           OnClick="GoBack">
+                    @Lang["Cancel"]
+                </MudButton>
+            </MudStack>
+
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <MudAlert Severity="Severity.Error" Class="mt-3">
+                    @errorMessage
+                </MudAlert>
+            }
+
+        </MudForm>
+    }
+</MudPaper>
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private MudForm? form;
+    private bool isLoading = true;
+    private string? errorMessage;
+
+    private InvoiceEditModel model = new();
+    private List<Customer> customers = new();
+
+    private bool IsNew => !Id.HasValue || Id.Value == 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Lang.OnLanguageChanged += StateHasChanged;
+        
+        customers = (await CustomerService.GetPagedAsync(1, 1000, null))
+            .Items
+            .ToList();
+
+        if (IsNew)
+        {
+            model.DateIssued = DateTime.Today;
+            model.DueDate = DateTime.Today.AddDays(7);
+            model.Status = "Pending";
+
+            if (!model.Items.Any())
+            {
+                model.Items.Add(new InvoiceItemEditModel());
+            }
+
+            isLoading = false;
+        }
+        else
+        {
+            var invoice = await InvoiceService.GetByIdAsync(Id!.Value);
+            if (invoice == null)
+            {
+                errorMessage = Lang["InvoiceNotFound"];
+                isLoading = false;
+                return;
+            }
+
+            model.Id = invoice.Id;
+            model.CustomerId = invoice.CustomerId;
+            model.DateIssued = invoice.DateIssued;
+            model.DueDate = invoice.DueDate;
+            model.Status = invoice.Status;
+            model.InvoiceNumber = invoice.InvoiceNumber;
+
+            model.Items = invoice.Items
+                .Select(ii => new InvoiceItemEditModel
+                    {
+                        Description = ii.Description,
+                        Quantity = ii.Quantity,
+                        UnitPrice = ii.UnitPrice
+                    })
+                .ToList();
+
+            if (!model.Items.Any())
+                model.Items.Add(new InvoiceItemEditModel());
+
+            isLoading = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        Lang.OnLanguageChanged -= StateHasChanged;
+    }
+
+    private void AddItem()
+    {
+        model.Items.Add(new InvoiceItemEditModel());
+    }
+
+    private void RemoveItem(InvoiceItemEditModel item)
+    {
+        if (model.Items.Contains(item))
+        {
+            model.Items.Remove(item);
+        }
+
+        if (!model.Items.Any())
+            model.Items.Add(new InvoiceItemEditModel());
+    }
+
+    private async Task SubmitForm()
+    {
+        errorMessage = null;
+
+        if (form is not null)
+        {
+            await form.Validate();
+        }
+
+        // ?? ?? ?????? ?? ????
+        if (form is not null && !form.IsValid)
+            return;
+
+        await HandleValidSubmit();
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        errorMessage = null;
+
+        if (model.CustomerId == 0)
+        {
+            errorMessage = Lang["CustomerRequired"];
+            return;
+        }
+
+        var validItems = model.Items
+            .Where(i => !string.IsNullOrWhiteSpace(i.Description) && i.Quantity > 0)
+            .ToList();
+
+        if (!validItems.Any())
+        {
+            errorMessage = Lang["InvoiceItemsRequired"];
+            return;
+        }
+
+        var invoice = new Invoice
+            {
+                Id = model.Id,
+                CustomerId = model.CustomerId,
+                DateIssued = model.DateIssued,
+                DueDate = model.DueDate,
+                Status = model.Status,
+                InvoiceNumber = model.InvoiceNumber ?? string.Empty
+            };
+
+        var items = validItems.Select(i => new InvoiceItem
+            {
+                Description = i.Description,
+                Quantity = i.Quantity,
+                UnitPrice = i.UnitPrice
+            }).ToList();
+
+        try
+        {
+            if (IsNew)
+            {
+                await InvoiceService.CreateAsync(invoice, items);
+                Snackbar.Add(Lang["InvoiceAddedSuccessfully"], Severity.Success);
+            }
+            else
+            {
+                await InvoiceService.UpdateAsync(invoice, items);
+                Snackbar.Add(Lang["InvoiceUpdatedSuccessfully"], Severity.Success);
+            }
+
+            Navigation.NavigateTo("/invoices");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo("/invoices");
+    }
+
+    public class InvoiceItemEditModel
+    {
+        public string Description { get; set; } = string.Empty;
+        public decimal Quantity { get; set; } = 1;
+        public decimal UnitPrice { get; set; } = 0;
+        public decimal Total => Quantity * UnitPrice;
+    }
+
+    public class InvoiceEditModel
+    {
+        public int Id { get; set; }
+        public int CustomerId { get; set; }
+
+        public DateTime DateIssued { get; set; } = DateTime.Today;
+        public DateTime? DueDate { get; set; }
+        public string Status { get; set; } = "Pending";
+        public string? InvoiceNumber { get; set; }
+
+        public List<InvoiceItemEditModel> Items { get; set; } = new();
+
+        public decimal TotalAmount => Items.Sum(i => i.Total);
+    }
+}
+

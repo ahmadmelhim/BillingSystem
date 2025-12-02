@@ -1,0 +1,33 @@
+@inject LanguageService Lang
+@implements IDisposable
+
+<MudButton Variant="Variant.Text" 
+           Color="Color.Inherit"
+           StartIcon="@Icons.Material.Outlined.Translate"
+           OnClick="ToggleLanguage"
+           Size="Size.Small"
+           Style="text-transform: none; padding: 4px 12px;">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+        <MudText Typo="Typo.body2" Style="font-weight: 500;">
+            @(Lang.IsArabic ? "العربية" : "English")
+        </MudText>
+    </MudStack>
+</MudButton>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Lang.OnLanguageChanged += StateHasChanged;
+    }
+
+    private void ToggleLanguage()
+    {
+        Lang.ToggleLanguage();
+    }
+
+    public void Dispose()
+    {
+        Lang.OnLanguageChanged -= StateHasChanged;
+    }
+}
+

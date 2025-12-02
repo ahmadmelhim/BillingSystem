@@ -292,11 +292,12 @@
             var pdfBytes = await PdfService.GenerateInvoicePdfAsync(id);
             var fileName = $"Invoice-{invoice.InvoiceNumber}.pdf";
 
-            var subject = $"فاتورة رقم {invoice.InvoiceNumber}";
-            var body =
-                $"عزيزي/عزيزتي {invoice.Customer.Name},\n\n" +
-                $"مرفق فاتورتك بتاريخ {invoice.DateIssued:yyyy-MM-dd} بمبلغ {invoice.TotalAmount:0.00} ₪.\n\n" +
-                $"مع التحية,\nBilling System";
+            var subject = string.Format(Lang["InvoiceEmailSubject"], invoice.InvoiceNumber);
+            var body = string.Format(
+                Lang["InvoiceEmailBody"],
+                invoice.Customer.Name,
+                invoice.DateIssued.ToString("yyyy-MM-dd"),
+                $"{invoice.TotalAmount:0.00} ₪");
 
             await EmailService.SendEmailWithAttachmentAsync(
                 invoice.Customer.Email,

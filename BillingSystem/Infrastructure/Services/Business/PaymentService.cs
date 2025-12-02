@@ -1,23 +1,25 @@
 using BillingSystem.Core.Interfaces;
-using BillingSystem.Infrastructure.Data;
+using BillingSystem.Core.Interfaces.Repositories;
 using BillingSystem.Core.Models;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace BillingSystem.Infrastructure.Services.Business;
 
 public class PaymentService : IPaymentService
 {
-    private readonly ApplicationDbContext _db;
+    private readonly IPaymentRepository _paymentRepository;
+    private readonly IInvoiceRepository _invoiceRepository;
     private readonly ICurrentUserService _currentUserService;
     private readonly ILogger<PaymentService> _logger;
 
     public PaymentService(
-        ApplicationDbContext db, 
+        IPaymentRepository paymentRepository,
+        IInvoiceRepository invoiceRepository,
         ICurrentUserService currentUserService,
         ILogger<PaymentService> logger)
     {
-        _db = db;
+        _paymentRepository = paymentRepository;
+        _invoiceRepository = invoiceRepository;
         _currentUserService = currentUserService;
         _logger = logger;
     }
@@ -30,17 +32,13 @@ public class PaymentService : IPaymentService
             return Array.Empty<Payment>();
 
         // تحقق من أن الفاتورة تابعة للمستخدم الحالي
-        var invoiceExists = await _db.Invoices
-            .AnyAsync(i => i.Id == invoiceId && i.UserId == currentUserId.Value);
+        var invoice = await _invoiceRepository.GetByIdAsync(invoiceId, currentUserId.Value);
 
-        if (!invoiceExists)
+        if (invoice == null)
             return Array.Empty<Payment>();
 
-        return await _db.Payments
-            .Where(p => p.InvoiceId == invoiceId)
-            .OrderByDescending(p => p.Date)
-            .ThenByDescending(p => p.Id)
-            .ToListAsync();
+        var payments = await _paymentRepository.GetByInvoiceIdAsync(invoiceId);
+        return payments.ToList();
     }
 
     // 📝 إنشاء دفعة جديدة مع تحقق كامل من الصلاحيات
@@ -53,10 +51,7 @@ public class PaymentService : IPaymentService
             throw new UnauthorizedAccessException("User not authenticated.");
         }
 
-        var invoice = await _db.Invoices
-            .Include(i => i.Payments)
-            .Where(i => i.UserId == currentUserId.Value)
-            .FirstOrDefaultAsync(i => i.Id == payment.InvoiceId);
+        var invoice = await _invoiceRepository.GetByIdWithDetailsAsync(payment.InvoiceId, currentUserId.Value);
 
         if (invoice == null)
         {
@@ -70,7 +65,7 @@ public class PaymentService : IPaymentService
             throw new InvalidOperationException("قيمة الدفعة يجب أن تكون أكبر من صفر.");
         }
 
-        var alreadyPaid = invoice.Payments.Sum(p => p.Amount);
+        var alreadyPaid = invoice.Payments?.Sum(p => p.Amount) ?? 0;
         var newTotalPaid = alreadyPaid + payment.Amount;
 
         if (newTotalPaid > invoice.TotalAmount)
@@ -84,28 +79,25 @@ public class PaymentService : IPaymentService
             payment.Date = DateTime.Today;
 
         payment.CreatedAt = DateTime.UtcNow;
-        _db.Payments.Add(payment);
+        
+        var created = await _paymentRepository.CreatePaymentAsync(payment);
 
         // تحديث حالة الفاتورة تلقائياً
-        if (newTotalPaid == invoice.TotalAmount)
+        if (newTotalPaid >= invoice.TotalAmount)
         {
             invoice.Status = "Paid";
         }
-        else if (newTotalPaid > 0 && newTotalPaid < invoice.TotalAmount)
-        {
-            invoice.Status = "Pending";
-        }
-        else
+        else if (newTotalPaid > 0)
         {
             invoice.Status = "Pending";
         }
 
-        await _db.SaveChangesAsync();
+        await _invoiceRepository.UpdateInvoiceAsync(invoice);
 
         _logger.LogInformation("Created payment {PaymentId} for invoice {InvoiceNumber} (Amount: {Amount})", 
-            payment.Id, invoice.InvoiceNumber, payment.Amount);
+            created.Id, invoice.InvoiceNumber, payment.Amount);
 
-        return payment;
+        return created;
     }
 
     // 🗑 حذف دفعة بتحقق كامل من الصلاحيات
@@ -118,11 +110,7 @@ public class PaymentService : IPaymentService
             throw new UnauthorizedAccessException("User not authenticated.");
         }
 
-        var payment = await _db.Payments
-            .Include(p => p.Invoice)
-            .ThenInclude(i => i.Payments)
-            .Where(p => p.Invoice.UserId == currentUserId.Value)
-            .FirstOrDefaultAsync(p => p.Id == id);
+        var payment = await _paymentRepository.GetByIdAsync(id, currentUserId.Value);
 
         if (payment == null)
         {
@@ -130,16 +118,21 @@ public class PaymentService : IPaymentService
             return;
         }
 
-        var invoice = payment.Invoice;
+        var invoice = await _invoiceRepository.GetByIdWithDetailsAsync(payment.InvoiceId, currentUserId.Value);
+        
+        if (invoice == null)
+        {
+            _logger.LogWarning("Invoice for payment {PaymentId} not found", id);
+            return;
+        }
+
         var deletedAmount = payment.Amount;
 
-        _db.Payments.Remove(payment);
-        await _db.SaveChangesAsync();
+        await _paymentRepository.DeleteAsync(payment.Id);
 
         // إعادة حساب حالة الفاتورة
-        var totalPaid = await _db.Payments
-            .Where(p => p.InvoiceId == invoice.Id)
-            .SumAsync(p => p.Amount);
+        var remainingPayments = await _paymentRepository.GetByInvoiceIdAsync(invoice.Id);
+        var totalPaid = remainingPayments.Sum(p => p.Amount);
 
         if (totalPaid == 0)
         {
@@ -154,10 +147,9 @@ public class PaymentService : IPaymentService
             invoice.Status = "Pending";
         }
 
-        await _db.SaveChangesAsync();
+        await _invoiceRepository.UpdateInvoiceAsync(invoice);
 
         _logger.LogInformation("Deleted payment {PaymentId} (Amount: {Amount}) from invoice {InvoiceNumber}", 
             id, deletedAmount, invoice.InvoiceNumber);
     }
 }
-

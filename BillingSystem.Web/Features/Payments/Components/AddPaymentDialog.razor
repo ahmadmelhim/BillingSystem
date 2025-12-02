@@ -1,0 +1,123 @@
+@using BillingSystem.Core.Models
+@using BillingSystem.Core.Interfaces
+@using MudBlazor
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form" Model="@_model">
+            <MudGrid>
+                <MudItem xs="12">
+                    <MudDatePicker Label="@Lang["Date"]"
+                                   Date="_model.Date"
+                                   DateChanged="@((DateTime? d) => _model.Date = d ?? DateTime.Today)"
+                                   Required="true"
+                                   RequiredError="@Lang["Required"]" />
+                </MudItem>
+
+
+                <MudItem xs="12">
+                    <MudNumericField T="decimal"
+                                     Label="@Lang["Amount"]"
+                                     @bind-Value="_model.Amount"
+                                     Required="true"
+                                     Min="0.01m"
+                                     Max="@RemainingAmount"
+                                     Adornment="Adornment.Start"
+                                     AdornmentText="₪"
+                                     HelperText="@(string.Format(Lang["RemainingHelperText"], RemainingAmount.ToString("N2")))"
+                                     RequiredError="@Lang["Required"]" />
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudSelect T="string"
+                               Label="@Lang["Method"]"
+                               @bind-Value="_model.Method"
+                               Required="true">
+                        <MudSelectItem Value="@("Cash")">@Lang["Cash"]</MudSelectItem>
+                        <MudSelectItem Value="@("Credit Card")">@Lang["CreditCard"]</MudSelectItem>
+                        <MudSelectItem Value="@("Bank Transfer")">@Lang["BankTransfer"]</MudSelectItem>
+                        <MudSelectItem Value="@("Check")">@Lang["Check"]</MudSelectItem>
+                        <MudSelectItem Value="@("Other")">@Lang["Other"]</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudTextField T="string"
+                                  Label="@Lang["Reference"]"
+                                  @bind-Value="_model.Reference"
+                                  HelperText="@Lang["ReferenceHelperText"]" />
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudTextField T="string"
+                                  Label="@Lang["Notes"]"
+                                  @bind-Value="_model.Notes"
+                                  Lines="3" />
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">@Lang["Cancel"]</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">@Lang["Save"]</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    
+    [Parameter] public Invoice Invoice { get; set; } = default!;
+    [Parameter] public decimal RemainingAmount { get; set; }
+
+    private MudForm? _form;
+    private PaymentModel _model = new();
+
+    protected override void OnInitialized()
+    {
+        _model.Date = DateTime.Today;
+        _model.Amount = RemainingAmount;
+        _model.Method = "Cash";
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private async Task Submit()
+    {
+        if (_form != null)
+        {
+            await _form.Validate();
+            if (!_form.IsValid)
+                return;
+        }
+
+        if (_model.Amount > RemainingAmount)
+        {
+            return;
+        }
+
+        var payment = new Payment
+        {
+            InvoiceId = Invoice.Id,
+            Date = _model.Date,
+            Amount = _model.Amount,
+            Method = _model.Method,
+            Reference = _model.Reference,
+            Notes = _model.Notes
+        };
+
+        MudDialog.Close(DialogResult.Ok(payment));
+    }
+
+    private class PaymentModel
+    {
+        public DateTime Date { get; set; } = DateTime.Today;
+        public decimal Amount { get; set; }
+        public string Method { get; set; } = "Cash";
+        public string? Reference { get; set; }
+        public string? Notes { get; set; }
+    }
+}
+

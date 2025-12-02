@@ -1,0 +1,95 @@
+@inherits LayoutComponentBase
+@inject LanguageService Lang
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<MudThemeProvider @ref="@_mudThemeProvider" @bind-IsDarkMode="@_isDarkMode" Theme="@_theme" />
+<MudDialogProvider />
+<MudSnackbarProvider />
+<MudPopoverProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1">
+        <div @onclick="@(() => Navigation.NavigateTo("/"))" style="cursor: pointer;">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="ml-2">
+                <MudIcon Icon="@Icons.Material.Filled.Receipt" Color="Color.Inherit" />
+                <MudText Typo="Typo.h6" Style="font-weight: 600;">Billing System</MudText>
+            </MudStack>
+        </div>
+        <MudSpacer />
+        
+        <!-- Login/Register Buttons -->
+        <MudButton Href="/login" 
+                   Variant="Variant.Text" 
+                   Color="Color.Inherit" 
+                   StartIcon="@Icons.Material.Filled.Login"
+                   Style="text-transform: none; font-weight: 500;">
+            @Lang["SignIn"]
+        </MudButton>
+        <MudButton Href="/register" 
+                   Variant="Variant.Text" 
+                   Color="Color.Inherit" 
+                   StartIcon="@Icons.Material.Filled.PersonAdd"
+                   Style="text-transform: none; font-weight: 500;">
+            @Lang["SignUp"]
+        </MudButton>
+        
+        <MudDivider Vertical="true" FlexItem="true" Class="mx-3 my-2" />
+        
+        <!-- Language Switcher -->
+        <LanguageSwitcher />
+        
+        <!-- Dark Mode Toggle -->
+        <MudTooltip Text="@(_isDarkMode ? "Light Mode" : "Dark Mode")">
+            <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)" 
+                           Color="Color.Inherit" 
+                           OnClick="@DarkModeToggle" />
+        </MudTooltip>
+    </MudAppBar>
+    
+    <MudMainContent>
+        @Body
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _isDarkMode = false;
+    private MudThemeProvider _mudThemeProvider = null!;
+
+    private MudTheme _theme = new MudTheme()
+    {
+        PaletteLight = new PaletteLight()
+        {
+            Primary = Colors.Blue.Default,
+            Secondary = Colors.Cyan.Darken1,
+            AppbarBackground = Colors.Blue.Darken2,
+        },
+        PaletteDark = new PaletteDark()
+        {
+            Primary = Colors.Blue.Lighten1,
+            Secondary = Colors.Cyan.Lighten1,
+            AppbarBackground = Colors.Blue.Darken3,
+        }
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _isDarkMode = await _mudThemeProvider.GetSystemDarkModeAsync();
+            StateHasChanged();
+        }
+    }
+
+    void DarkModeToggle() => _isDarkMode = !_isDarkMode;
+
+    protected override void OnInitialized()
+    {
+        Lang.OnLanguageChanged += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        Lang.OnLanguageChanged -= StateHasChanged;
+    }
+}

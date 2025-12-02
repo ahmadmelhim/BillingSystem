@@ -1,0 +1,286 @@
+@page "/"
+@layout BillingSystem.Web.Shared.Layouts.PublicLayout
+@inject IAuthService AuthService
+@implements IDisposable
+
+<PageTitle>الرئيسية</PageTitle>
+
+    <div class="hero-section">
+        <MudContainer MaxWidth="MaxWidth.Large">
+            <MudGrid>
+                <MudItem xs="12" md="6" Class="d-flex flex-column justify-center">
+                    <MudText Typo="Typo.h2" Class="hero-title mb-4 animate-fade-in-up" Style="color: white !important;">
+                        @Lang["BillingSystemTitle"]
+                    </MudText>
+                    <MudText Typo="Typo.h5" Class="hero-subtitle mb-8 animate-fade-in-up delay-1" Style="color: rgba(255,255,255,0.9) !important;">
+                        @Lang["BillingSystemSubtitle"]
+                    </MudText>
+                    <div class="d-flex gap-4 animate-fade-in-up delay-2">
+                        <MudButton Variant="Variant.Filled" 
+                                   Color="Color.Secondary" 
+                                   Size="Size.Large" 
+                                   OnClick="@(() => Navigation.NavigateTo("/register"))"
+                                   Class="hero-btn px-8 py-3 rounded-pill">
+                            @Lang["GetStarted"]
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined" 
+                                   Color="Color.Inherit" 
+                                   Size="Size.Large" 
+                                   OnClick="@(() => Navigation.NavigateTo("/login"))"
+                                   Class="hero-btn-outline px-8 py-3 rounded-pill"
+                                   Style="color: white !important; border-color: white !important;">
+                            @Lang["SignIn"]
+                        </MudButton>
+                    </div>
+                </MudItem>
+                <MudItem xs="12" md="6" Class="d-flex justify-center align-center d-none d-md-flex">
+                    <MudIcon Icon="@Icons.Material.Filled.Analytics" Style="font-size: 20rem; color: rgba(255,255,255,0.2);" />
+                </MudItem>
+            </MudGrid>
+        </MudContainer>
+    </div>
+
+    <!-- Stats Section -->
+    <MudContainer MaxWidth="MaxWidth.Large" Class="mt-n16 relative z-10">
+        <MudPaper Elevation="4" Class="pa-8 rounded-xl">
+            <MudGrid>
+                <MudItem xs="12" sm="4" Class="d-flex flex-column align-center border-r">
+                    <MudText Typo="Typo.h3" Color="Color.Inherit" Style="font-weight: 800;">500+</MudText>
+                    <MudText Typo="Typo.subtitle1" Color="Color.Inherit">@Lang["HappyCustomers"]</MudText>
+                </MudItem>
+                <MudItem xs="12" sm="4" Class="d-flex flex-column align-center border-r">
+                    <MudText Typo="Typo.h3" Color="Color.Inherit" Style="font-weight: 800;">10k+</MudText>
+                    <MudText Typo="Typo.subtitle1" Color="Color.Inherit">@Lang["InvoicesGenerated"]</MudText>
+                </MudItem>
+                <MudItem xs="12" sm="4" Class="d-flex flex-column align-center">
+                    <MudText Typo="Typo.h3" Color="Color.Inherit" Style="font-weight: 800;">99.9%</MudText>
+                    <MudText Typo="Typo.subtitle1" Color="Color.Inherit">@Lang["Uptime"]</MudText>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+    </MudContainer>
+
+    <!-- Features Section -->
+    <MudContainer MaxWidth="MaxWidth.Large" Class="py-16">
+        <div class="text-center mb-16">
+            <MudText Typo="Typo.h3" Color="Color.Inherit" Class="mb-4" Style="font-weight: 700;">
+                @Lang["WhyChooseUs"]
+            </MudText>
+            <MudText Typo="Typo.h6" Color="Color.Inherit" Style="max-width: 600px; margin: 0 auto;">
+                @Lang["WhyChooseUsDesc"]
+            </MudText>
+        </div>
+
+        <MudGrid Spacing="4">
+            <MudItem xs="12" sm="6" md="4">
+                <MudPaper Elevation="0" Class="feature-card pa-8 h-100 border-2">
+                    <div class="icon-box mb-6 bg-primary-light">
+                        <MudIcon Icon="@Icons.Material.Filled.Speed" Color="Color.Primary" Size="Size.Large" />
+                    </div>
+                    <MudText Typo="Typo.h5" Class="mb-3 font-bold" Color="Color.Inherit">@Lang["FastInvoicing"]</MudText>
+                    <MudText Typo="Typo.body1" Color="Color.Inherit">
+                        @Lang["FastInvoicingDesc"]
+                    </MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudPaper Elevation="0" Class="feature-card pa-8 h-100 border-2">
+                    <div class="icon-box mb-6 bg-secondary-light">
+                        <MudIcon Icon="@Icons.Material.Filled.Security" Color="Color.Secondary" Size="Size.Large" />
+                    </div>
+                    <MudText Typo="Typo.h5" Class="mb-3 font-bold" Color="Color.Inherit">@Lang["SecurePayments"]</MudText>
+                    <MudText Typo="Typo.body1" Color="Color.Inherit">
+                        @Lang["SecurePaymentsDesc"]
+                    </MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudPaper Elevation="0" Class="feature-card pa-8 h-100 border-2">
+                    <div class="icon-box mb-6 bg-tertiary-light">
+                        <MudIcon Icon="@Icons.Material.Filled.Insights" Color="Color.Tertiary" Size="Size.Large" />
+                    </div>
+                    <MudText Typo="Typo.h5" Class="mb-3 font-bold" Color="Color.Inherit">@Lang["SmartAnalytics"]</MudText>
+                    <MudText Typo="Typo.body1" Color="Color.Inherit">
+                        @Lang["SmartAnalyticsDesc"]
+                    </MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    </MudContainer>
+
+    <!-- CTA Section -->
+    <div class="cta-section py-16">
+        <MudContainer MaxWidth="MaxWidth.Medium" Class="text-center">
+            <MudText Typo="Typo.h3" Class="mb-6" Style="font-weight: 700; color: white !important;">
+                @Lang["ReadyToStart"]
+            </MudText>
+            <MudText Typo="Typo.h6" Class="mb-8" Style="color: rgba(255,255,255,0.8) !important;">
+                @Lang["JoinThousands"]
+            </MudText>
+            <MudButton Variant="Variant.Filled" 
+                       Color="Color.Secondary" 
+                       Size="Size.Large" 
+                       OnClick="@(() => Navigation.NavigateTo("/register"))"
+                       Class="px-12 py-4 rounded-pill text-white font-bold">
+                @Lang["CreateFreeAccount"]
+            </MudButton>
+        </MudContainer>
+    </div>
+
+    <!-- Footer -->
+    <MudPaper Square="true" Class="pt-16 pb-8" Style="background-color: var(--mud-palette-background-grey);">
+        <MudContainer MaxWidth="MaxWidth.Large">
+            <MudGrid>
+                <MudItem xs="12" md="4">
+                    <MudStack Spacing="2">
+                        <div class="d-flex align-center gap-2 mb-4">
+                            <MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Color="Color.Primary" Size="Size.Large" />
+                            <MudText Typo="Typo.h5" Style="font-weight: 700;" Color="Color.Inherit">BillingSystem</MudText>
+                        </div>
+                        <MudText Typo="Typo.body2" Color="Color.Inherit">
+                            @Lang["FooterDesc"]
+                        </MudText>
+                    </MudStack>
+                </MudItem>
+                <MudItem xs="12" md="4"></MudItem>
+                <MudItem xs="12" md="4">
+                    <MudText Typo="Typo.h6" Class="mb-4 font-bold" Color="Color.Inherit">@Lang["Contact"]</MudText>
+                    <MudStack Spacing="2">
+                        <div class="d-flex align-center gap-2">
+                            <MudIcon Icon="@Icons.Material.Filled.Email" Size="Size.Small" Color="Color.Primary" />
+                            <MudText Typo="Typo.body2" Color="Color.Inherit">ahmadmelhem1q@gmail.com</MudText>
+                        </div>
+                        <div class="d-flex align-center gap-2">
+                            <MudIcon Icon="@Icons.Material.Filled.Phone" Size="Size.Small" Color="Color.Primary" />
+                            <MudText Typo="Typo.body2" Color="Color.Inherit">+972 59-556-9887</MudText>
+                        </div>
+                    </MudStack>
+                </MudItem>
+            </MudGrid>
+            <MudDivider Class="my-8" />
+            <div class="d-flex justify-center">
+                <MudText Typo="Typo.body2" Color="Color.Inherit" Align="Align.Center">
+                    © @DateTime.Now.Year Billing System. All rights reserved.
+                </MudText>
+            </div>
+        </MudContainer>
+    </MudPaper>
+
+
+<style>
+    .landing-page {
+        overflow-x: hidden;
+    }
+
+    .hero-section {
+        background: linear-gradient(135deg, #1a237e 0%, #0d47a1 100%);
+        color: white;
+        padding: 120px 0 160px;
+        position: relative;
+        clip-path: polygon(0 0, 100% 0, 100% 85%, 0 100%);
+    }
+
+    .hero-title {
+        font-weight: 800;
+        line-height: 1.2;
+        text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .hero-subtitle {
+        opacity: 0.9;
+        font-weight: 300;
+        line-height: 1.6;
+    }
+
+    .hero-btn {
+        font-weight: 700;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        transition: transform 0.2s;
+    }
+
+    .hero-btn:hover {
+        transform: translateY(-2px);
+    }
+
+    .hero-btn-outline {
+        border: 2px solid rgba(255,255,255,0.3);
+        font-weight: 700;
+    }
+
+    .hero-btn-outline:hover {
+        background: rgba(255,255,255,0.1);
+        border-color: white;
+    }
+
+    .feature-card {
+        transition: all 0.3s ease;
+        border: 1px solid transparent;
+    }
+
+    .feature-card:hover {
+        transform: translateY(-10px);
+        box-shadow: 0 20px 40px rgba(0,0,0,0.08);
+        border-color: var(--mud-palette-primary-lighten);
+    }
+
+    .icon-box {
+        width: 64px;
+        height: 64px;
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .bg-primary-light { background-color: var(--mud-palette-primary-hover); }
+    .bg-secondary-light { background-color: var(--mud-palette-secondary-hover); }
+    .bg-tertiary-light { background-color: var(--mud-palette-tertiary-hover); }
+
+    .cta-section {
+        background: linear-gradient(45deg, #0d47a1 0%, #1976d2 100%);
+    }
+
+    .border-r {
+        border-right: 1px solid #e0e0e0;
+    }
+
+    @@media (max-width: 600px) {
+        .border-r { border-right: none; border-bottom: 1px solid #e0e0e0; padding-bottom: 16px; margin-bottom: 16px; }
+        .hero-section { padding: 80px 0 120px; text-align: center; }
+        .hero-title { font-size: 2.5rem; }
+    }
+
+    /* Animations */
+    .animate-fade-in-up {
+        animation: fadeInUp 0.8s ease-out forwards;
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    .delay-1 { animation-delay: 0.2s; }
+    .delay-2 { animation-delay: 0.4s; }
+
+    @@keyframes fadeInUp {
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+</style>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        var isAuthenticated = await AuthService.IsAuthenticatedAsync();
+        if (isAuthenticated)
+        {
+            Navigation.NavigateTo("/dashboard", replace: true);
+        }
+        Lang.OnLanguageChanged += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        Lang.OnLanguageChanged -= StateHasChanged;
+    }
+}

@@ -1,8 +1,7 @@
 using BillingSystem.Core.Interfaces;
-using BillingSystem.Infrastructure.Data;
+using BillingSystem.Core.Interfaces.Repositories;
 using BillingSystem.Core.Models;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.EntityFrameworkCore;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -11,7 +10,7 @@ namespace BillingSystem.Infrastructure.Services.Pdf
 {
     public class InvoicePdfService : IPdfService
     {
-        private readonly ApplicationDbContext _db;
+        private readonly IInvoiceRepository _invoiceRepository;
         private readonly IWebHostEnvironment _env;
 
         // Modern Blue Theme
@@ -19,19 +18,17 @@ namespace BillingSystem.Infrastructure.Services.Pdf
         private static readonly string SecondaryColor = "#424242";
         private static readonly string LightGrey = "#F5F5F5";
 
-        public InvoicePdfService(ApplicationDbContext db, IWebHostEnvironment env)
+        public InvoicePdfService(IInvoiceRepository invoiceRepository, IWebHostEnvironment env)
         {
-            _db = db;
+            _invoiceRepository = invoiceRepository;
             _env = env;
         }
 
         public async Task<byte[]> GenerateInvoicePdfAsync(int invoiceId)
         {
-            var invoice = await _db.Invoices
-                .Include(i => i.Customer)
-                .Include(i => i.Items)
-                .FirstOrDefaultAsync(i => i.Id == invoiceId);
-
+            // استخدام Repository بدلاً من DbContext
+            var invoice = await _invoiceRepository.GetByIdWithDetailsSystemAsync(invoiceId);
+            
             if (invoice == null)
                 throw new KeyNotFoundException("Invoice not found.");
 
@@ -190,4 +187,3 @@ namespace BillingSystem.Infrastructure.Services.Pdf
         }
     }
 }
-
